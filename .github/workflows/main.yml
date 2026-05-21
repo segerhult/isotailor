@@ -1,0 +1,28 @@
+name: Dynamic docs
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+jobs:
+  orchestra:
+    runs-on: ubuntu-latest
+    environment: OPENAI_API_KEY
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    - run: npx orchestra-ai-devops doc-gen .
+      env:
+        ORCHESTRA_ROLE_ROUTING: prefer
+        OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        AI_MODEL: ${{ secrets.AI_MODEL }}
+        AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -38,7 +38,7 @@ This document describes the API endpoints for the Isotailor tool.
 
 **Request Body:**
 
-*   `software`: (array) A list of software packages to include in the tailored ISO. Comma-separated string.
+*   `software`: (array) A list of software packages to include in the tailored ISO.
 
 **Response:**
 

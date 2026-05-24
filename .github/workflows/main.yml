@@ -46,8 +46,7 @@ jobs:
           echo "skip=0" >> "$GITHUB_OUTPUT"
 
       - name: Run Orchestra doc-gen
-        if: steps.ai.outputs.skip != '1'
-        run: npx orchestra-ai-devops doc-gen .
+        
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1
@@ -56,3 +55,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ORCHESTRA_ROLE_ROUTING: prefer
           ORCHESTRA_DOCS_PR: '1'
+        run: npx orchestra-ai-devops doc-gen .  

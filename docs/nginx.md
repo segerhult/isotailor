@@ -12,4 +12,4 @@ The `web/nginx.conf` file configures Nginx as a reverse proxy, forwarding reques
 
 ## Local Development and CI
 
-To run Nginx locally, refer to the instructions in the [README.md](README.md) file, which outlines the process for building and running the application and its associated services (including Nginx). Continuous Integration (CI) builds and tests also utilize this configuration.
+To run Nginx locally, follow the instructions in the [README.md](README.md) file, which outlines the process for building and running the application and its associated services (including Nginx). Continuous Integration (CI) builds and tests also utilize this configuration via the `.github/workflows/main.yml` file.

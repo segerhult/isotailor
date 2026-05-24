@@ -34,7 +34,7 @@ This document describes the API endpoints for the Isotailor tool.
 
 **Method:** `POST`
 
-**Description:**  Updates the selected software for a specific upload.
+**Description:** Updates the selected software for a specific upload.
 
 **Request Body:**
 

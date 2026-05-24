@@ -1,1 +1,1 @@
-docker build --tag isotailor-server .
+docker build -t isotailor-server .

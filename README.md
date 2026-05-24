@@ -16,7 +16,7 @@ isotailor is a tool that allows users to upload ISO images and select software t
 
 ## Data Storage
 
-Data, including uploaded ISOs and configuration, is stored locally in the `./data` directory. It's recommended to back up this directory to prevent loss of data.
+Data, including uploaded ISOs and configuration, is stored locally in the `./data` directory. It’s recommended to back up this directory to prevent loss of data.
 
 ## API
 For developers, the isotailor API is available at `/api`. The APIs documentation is available in the [doc/api.md](doc/api.md) file.

@@ -37,7 +37,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1
           AI_BASE_URL: https://openrouter.ai/api/v1
-          AI_MODEL: qwen/qwen-2.5-7b-instruct
+          AI_MODEL: google/gemma-3-12b-it
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ORCHESTRA_ROLE_ROUTING: prefer
           ORCHESTRA_DOCS_PR: '1'

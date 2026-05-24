@@ -21,7 +21,7 @@ The following environment variables are used by the application:
 
 The application consists of a backend server and a Vue.js frontend. These are containerized using Docker.
 
-1.  **Backend:** The backend server (server.py) is built using a Python 3.11 slim image and configured in the [Dockerfile](Dockerfile). The Docker image is built as part of the CI/CD process.
+1.  **Backend:** The backend server (server.py) is built using a Python 3.11 slim image and configured in the [Dockerfile](Dockerfile).
 
 2.  **Frontend:** The Vue.js frontend is built using Vite and packaged as a Docker image. The [Dockerfile](web/Dockerfile) and configuration file [vite.config.js](web/vite.config.js) in the `/web` directory define the build process. The Nginx configuration file (`web/nginx.conf`) serves the built frontend. The frontend's `package.json` and `package-lock.json` specify dependencies.
 
@@ -33,7 +33,7 @@ To run the application locally:
 
 2.  Navigate to the root directory of the repository.
 
-3.  Ensure Docker is running, then manually build and run the backend and frontend containers.
+3.  Ensure Docker is running, then manually build and run the backend and frontend containers using the following commands:
 
     *   **Build Backend:** `docker build -t my-backend .`
     *   **Run Backend:** `docker run -p 8080:8080 my-backend`
@@ -41,7 +41,7 @@ To run the application locally:
     *   **Build Frontend:** Navigate to the `/web` directory and run `docker build -t my-frontend .`
     *   **Run Frontend:** `docker run -p 80:80 my-frontend`
 
-    *Note:* These commands assume you want to map port 8080 for the backend and port 80 for the frontend. Adjust as needed. The docker images are created using the Dockerfiles specified in the repository's root directory and the `/web` directory respectively.
+    *Note:* These commands assume you want to map port 8080 for the backend and port 80 for the frontend. Adjust as needed. The Docker images are created using the Dockerfiles specified in the repository's root directory and the `/web` directory respectively.
 
 ## API Documentation
 

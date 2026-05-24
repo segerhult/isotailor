@@ -24,7 +24,7 @@ jobs:
       env:
         OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         AI_BASE_URL: https://openrouter.ai/api/v1
-        AI_MODEL: openrouter/auto
+        AI_MODEL: google/gemma-4-26b-a4b-it:free
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         ORCHESTRA_ROLE_ROUTING: prefer
         ORCHESTRA_DOCS_PR: '1'

@@ -13,7 +13,7 @@
 ## Environment Variables (minimum)
 - `OPENAI_API_KEY`: Your OpenAI API key. Use your OpenRouter key when `AI_BASE_URL` is set to `https://openrouter.ai/api/v1`.
 - `AI_BASE_URL`: The base URL for your AI service. Example for OpenRouter: `https://openrouter.ai/api/v1`.
-- `AI_MODEL`: The AI model to use (e.g., "gpt-3.5-turbo").
+- `AI_MODEL`: The AI model to use (e.g., "gpt-3.5-turbo"). Consider "openrouter/auto" when using OpenRouter.
 - `GITHUB_TOKEN`: Required for GitHub pull request comments and creation.
 
 ## Orchestra
@@ -33,3 +33,8 @@ Configuration for Version Control System (VCS) integration.
 
 ## Commands
 - Run docs generator: `npx orchestra-ai-devops doc-gen . structure`
+
+## Data Storage
+Data, including uploaded ISOs and configuration, is stored locally in the `./data` directory. It’s recommended to back up this directory to prevent loss of data.
+
+NO_CHANGE

@@ -5,7 +5,7 @@ This document outlines the setup required to run the application, including envi
 ## AI Provider
 
 - `OPENAI_API_KEY`: API key used for OpenAI-compatible providers. Use your OpenRouter key when `AI_BASE_URL` is set to `https://openrouter.ai/api/v1`.
-- `AI_MODEL`: Model name to use (example: `openrouter/auto`).
+- `AI_MODEL`: Model name to use (example: `google/gemma-3-12b-it`).
 - `AI_BASE_URL`: The base URL for the OpenAI-compatible API (OpenRouter: `https://openrouter.ai/api/v1`).
 - `AI_PROVIDER`: (Optional) The AI provider to use (`openai`, `gemini`, or `ollama`). Defaults to `openai`.
 

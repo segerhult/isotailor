@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 
@@ -134,6 +135,29 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def send_json(self, status: int, payload: object) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def send_file(self, status: int, file_path: Path, download_name: str) -> None:
+        if not file_path.exists() or not file_path.is_file():
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            return
+        size = file_path.stat().st_size
+        self.send_response(status)
+        self.send_header("Content-Type", "application/octet-stream")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(size))
+        self.send_header("Content-Disposition", f'attachment; filename="{download_name}"')
+        self.end_headers()
+        with file_path.open("rb") as f:
+            shutil.copyfileobj(f, self.wfile, length=1024 * 1024)
+
     def redirect(self, location: str) -> None:
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", location)
@@ -157,9 +181,129 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.METHOD_NOT_ALLOWED)
         self.end_headers()
 
+    def read_json_body(self) -> Optional[dict]:
+        content_type = self.headers.get("Content-Type", "")
+        if "application/json" not in content_type:
+            return None
+        length_header = self.headers.get("Content-Length", "")
+        try:
+            content_length = int(length_header)
+        except ValueError:
+            return None
+        raw = self.rfile.read(content_length).decode("utf-8", errors="replace")
+        try:
+            parsed = json.loads(raw) if raw.strip() else {}
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(parsed, dict):
+            return None
+        return parsed
+
+    def do_OPTIONS(self) -> None:
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_HEAD(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path == "/api/health":
+            body = json.dumps({"ok": True, "time": now_iso()}, ensure_ascii=False).encode("utf-8")
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return
+
+        if path == "/":
+            index = load_index()
+            upload_count = len(index.get("uploads", {}))
+            body = page(
+                "isotailor",
+                f"""
+                <h1>isotailor</h1>
+                <p class="muted">Upload an ISO and choose what software should be installed.</p>
+                <div class="row">
+                  <div class="card">
+                    <h2>Create job</h2>
+                    <form action="/create" method="post" enctype="multipart/form-data">
+                      <label>ISO file</label>
+                      <input type="file" name="iso" accept=".iso" required />
+                      <hr />
+                      <label><strong>Software</strong> (defaults)</label>
+                      {software_checkboxes(set())}
+                      <label style="margin-top: 10px;"><strong>Custom software</strong> (one per line)</label>
+                      <textarea name="custom_software" placeholder="e.g.\nDocker\nkubectl"></textarea>
+                      <div style="margin-top: 14px;">
+                        <button type="submit">Upload ISO + Save selection</button>
+                      </div>
+                    </form>
+                  </div>
+                  <div class="card">
+                    <h2>Existing uploads</h2>
+                    <p class="muted">{upload_count} saved</p>
+                    <p><a href="/uploads">View uploads</a></p>
+                    <p class="muted">Data is stored locally under <code>./data</code>.</p>
+                  </div>
+                </div>
+                """,
+            )
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            return
+
+        self.send_response(HTTPStatus.NOT_FOUND)
+        self.end_headers()
+
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path == "/api/health":
+            self.send_json(HTTPStatus.OK, {"ok": True, "time": now_iso()})
+            return
+
+        if path == "/api/default-software":
+            self.send_json(HTTPStatus.OK, {"default_software": DEFAULT_SOFTWARE})
+            return
+
+        if path == "/api/uploads":
+            index = load_index()
+            uploads = index.get("uploads", {})
+            items = [uploads[k] for k in sorted(uploads.keys())]
+            self.send_json(HTTPStatus.OK, {"uploads": items})
+            return
+
+        if path.startswith("/api/uploads/"):
+            parts = [p for p in path.split("/") if p]
+            if len(parts) >= 3:
+                upload_id = parts[2]
+                index = load_index()
+                meta = index.get("uploads", {}).get(upload_id)
+                if not meta:
+                    self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                    return
+
+                if len(parts) == 3:
+                    self.send_json(HTTPStatus.OK, {"upload": meta})
+                    return
+
+                if len(parts) == 4 and parts[3] == "iso":
+                    iso_rel = meta.get("iso_path", "")
+                    file_path = (REPO_ROOT / iso_rel).resolve()
+                    download_name = meta.get("original_filename", f"{upload_id}.iso")
+                    self.send_file(HTTPStatus.OK, file_path, download_name)
+                    return
+
+        if path.startswith("/api/"):
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            return
 
         if path == "/":
             index = load_index()
@@ -283,6 +427,69 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path
 
+        if path == "/api/uploads":
+            content_type = self.headers.get("Content-Type", "")
+            if "multipart/form-data" not in content_type:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "expected_multipart_form_data"})
+                return
+
+            ensure_storage()
+            form = cgi.FieldStorage(
+                fp=self.rfile,
+                headers=self.headers,
+                environ={
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_TYPE": content_type,
+                },
+            )
+
+            if "iso" not in form:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "missing_iso"})
+                return
+
+            iso_field = form["iso"]
+            if not getattr(iso_field, "file", None):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "missing_iso_content"})
+                return
+
+            original_filename = os.path.basename(getattr(iso_field, "filename", "") or "")
+            if not original_filename.lower().endswith(".iso"):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "only_iso_allowed"})
+                return
+
+            upload_id = uuid.uuid4().hex
+            stored_iso_path = UPLOADS_DIR / f"{upload_id}.iso"
+            with stored_iso_path.open("wb") as out_f:
+                shutil.copyfileobj(iso_field.file, out_f, length=1024 * 1024)
+
+            selected_software = []
+            if "software" in form:
+                software_field = form["software"]
+                if isinstance(software_field, list):
+                    selected_software.extend([f.value for f in software_field])
+                else:
+                    selected_software.append(software_field.value)
+
+            custom_text = ""
+            if "custom_software" in form:
+                custom_text = form.getfirst("custom_software", "")
+
+            software = normalize_software_list(selected_software + parse_custom_software(custom_text))
+
+            index = load_index()
+            uploads = index.setdefault("uploads", {})
+            meta = {
+                "id": upload_id,
+                "original_filename": original_filename,
+                "iso_path": str(stored_iso_path.relative_to(REPO_ROOT)),
+                "created_at": now_iso(),
+                "software": software,
+            }
+            uploads[upload_id] = meta
+            save_index(index)
+            self.send_json(HTTPStatus.CREATED, {"upload": meta})
+            return
+
         if path == "/create":
             content_type = self.headers.get("Content-Type", "")
             if "multipart/form-data" not in content_type:
@@ -377,6 +584,55 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
             meta["updated_at"] = now_iso()
             save_index(index)
             self.redirect(f"/uploads/{upload_id}")
+            return
+
+        if path.startswith("/api/"):
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            return
+
+        self.method_not_allowed()
+
+    def do_PUT(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/api/uploads/") and path.endswith("/software"):
+            parts = [p for p in path.split("/") if p]
+            if len(parts) != 4:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                return
+            upload_id = parts[2]
+            body = self.read_json_body()
+            if body is None:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "expected_json"})
+                return
+
+            software_list = body.get("software", [])
+            custom_text = body.get("custom_software", "")
+            if isinstance(software_list, str):
+                software_list = [software_list]
+            if not isinstance(software_list, list) or not all(isinstance(s, str) for s in software_list):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_software"})
+                return
+            if not isinstance(custom_text, str):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_custom_software"})
+                return
+
+            software = normalize_software_list(software_list + parse_custom_software(custom_text))
+            index = load_index()
+            meta = index.get("uploads", {}).get(upload_id)
+            if not meta:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                return
+
+            meta["software"] = software
+            meta["updated_at"] = now_iso()
+            save_index(index)
+            self.send_json(HTTPStatus.OK, {"upload": meta})
+            return
+
+        if path.startswith("/api/"):
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
             return
 
         self.method_not_allowed()

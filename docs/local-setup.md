@@ -19,8 +19,25 @@ The following environment variables are used by the application:
 
 ## Building and Running the Application
 
-The application consists of a backend server and a Vue.js frontend, both containerized using Docker.  Refer to the `docker-compose.yml` file for instructions.
+The application consists of a backend server and a Vue.js frontend, both containerized using Docker. Refer to the `docker-compose.yml` file for instructions.
 
-## API Documentation
+## Docker Configuration
 
-Refer to the API documentation for details on the available endpoints and their usage.
+The application utilizes Docker and Docker Compose for local development.  Specific configurations are detailed in the following files:
+
+*   `.dockerignore`: Specifies files and directories to exclude from Docker image creation.
+*   `Dockerfile`: Defines how to build the Python backend image.
+*   `web/.dockerignore`: Specifies files and directories to exclude from the web frontend Docker image creation.
+*   `web/Dockerfile`: Defines how to build the Vue.js frontend image.
+*   `docker-compose.yml`: Defines the services and network configuration for the application.
+*   `web/nginx.conf`: Nginx configuration for the web frontend.
+
+## Code Structure
+
+*   `server.py`: Contains the Python backend server code.
+*   `web/`: Contains the Vue.js frontend code.
+    *   `web/index.html`: The main HTML entry point for the frontend.
+    *   `web/src/App.vue`: The main Vue component.
+    *   `web/src/api.js`: Contains functions for interacting with the backend API.
+    *   `web/src/main.js`: The entry point for the Vue.js application.
+    *   `web/vite.config.js`: Configuration for Vite, the frontend build tool.

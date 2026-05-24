@@ -13,7 +13,7 @@ This document outlines the setup required to run the application, including envi
 
 - `ORCHESTRA_ROLE_ROUTING`: `auto` (default) or `prefer` (use plugin preferred role/persona).
 - `ORCHESTRA_DOCS_PR`: Set to `1` to enable automatic draft documentation pull request creation in pull request workflows.
-- `ORCHESTRA_APP_NAME` / `ORCHESTRA_APP_URL`: Used to identify requests. Required for OpenRouter headers.
+- `ORCHESTRA_APP_NAME` / `ORCHESTRA_APP_URL`: Used to identify requests.  Required for OpenRouter headers.
 - `ORCHESTRA_SOURCE`: A string appended to the system prompt (example: `ci:github-actions`).
 - `ORCHESTRA_DEBUG`: Set to `1` to enable verbose AI error logging.
 
@@ -25,7 +25,7 @@ This document outlines the setup required to run the application, including envi
 
 ## Running the application
 
-The application's backend and frontend are containerized using Docker. The backend is built from `Dockerfile` and the frontend from `web/Dockerfile`.
+The application’s backend and frontend are containerized using Docker. The backend is built from `Dockerfile` and the frontend from `web/Dockerfile`.
 
 ### Backend
 

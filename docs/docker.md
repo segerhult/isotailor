@@ -1,1 +1,1 @@
-docker build --tag isotailor-server .
+docker build --no-cache -t isotailor-server:latest ./

@@ -84,6 +84,19 @@ def parse_custom_software(text: str) -> list[str]:
     return parts
 
 
+def build_install_manifest(software: list[str]) -> dict:
+    packages = normalize_software_list(software)
+    return {
+        "packages": packages,
+        "examples": {
+            "debian_ubuntu": {
+                "update": "sudo apt-get update",
+                "install": "sudo apt-get install -y " + " ".join(packages) if packages else "sudo apt-get install -y",
+            }
+        },
+    }
+
+
 def page(title: str, body: str) -> bytes:
     doc = f"""<!doctype html>
 <html lang="en">
@@ -299,6 +312,11 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
                     file_path = (REPO_ROOT / iso_rel).resolve()
                     download_name = meta.get("original_filename", f"{upload_id}.iso")
                     self.send_file(HTTPStatus.OK, file_path, download_name)
+                    return
+
+                if len(parts) == 4 and parts[3] == "manifest":
+                    manifest = build_install_manifest(meta.get("software", []))
+                    self.send_json(HTTPStatus.OK, {"upload": meta, "install": manifest})
                     return
 
         if path.startswith("/api/"):
@@ -629,6 +647,43 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
             meta["updated_at"] = now_iso()
             save_index(index)
             self.send_json(HTTPStatus.OK, {"upload": meta})
+            return
+
+        if path.startswith("/api/"):
+            self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+            return
+
+        self.method_not_allowed()
+
+    def do_DELETE(self) -> None:
+        parsed = urlparse(self.path)
+        path = parsed.path
+
+        if path.startswith("/api/uploads/"):
+            parts = [p for p in path.split("/") if p]
+            if len(parts) != 3:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                return
+            upload_id = parts[2]
+
+            index = load_index()
+            meta = index.get("uploads", {}).get(upload_id)
+            if not meta:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "not_found"})
+                return
+
+            iso_rel = meta.get("iso_path", "")
+            file_path = (REPO_ROOT / iso_rel).resolve() if iso_rel else None
+            if file_path and file_path.exists() and file_path.is_file():
+                try:
+                    file_path.unlink()
+                except OSError:
+                    self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "failed_to_delete_iso"})
+                    return
+
+            del index["uploads"][upload_id]
+            save_index(index)
+            self.send_json(HTTPStatus.OK, {"deleted": True, "id": upload_id})
             return
 
         if path.startswith("/api/"):

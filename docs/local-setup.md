@@ -33,13 +33,13 @@ To run the application locally:
 
 2.  Navigate to the root directory of the repository.
 
-3.  Ensure Docker is running, then manually build and run the backend and frontend containers using the following commands:
+3.  Ensure Docker is running, then build and run the backend and frontend containers using the following commands:
 
-    *   **Build Backend:** `docker build -t my-backend .`
-    *   **Run Backend:** `docker run -p 8080:8080 my-backend`
+    *   **Build Backend:** `docker build -t isotailor-server .`
+    *   **Run Backend:** `docker run -p 8080:8080 isotailor-server`
 
-    *   **Build Frontend:** Navigate to the `/web` directory and run `docker build -t my-frontend .`
-    *   **Run Frontend:** `docker run -p 80:80 my-frontend`
+    *   **Build Frontend:** Navigate to the `/web` directory and run `docker build -t isotailor-frontend .`
+    *   **Run Frontend:** `docker run -p 80:80 isotailor-frontend`
 
     *Note:* These commands assume you want to map port 8080 for the backend and port 80 for the frontend. Adjust as needed. The Docker images are created using the Dockerfiles specified in the repository's root directory and the `/web` directory respectively.
 

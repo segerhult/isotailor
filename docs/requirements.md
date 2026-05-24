@@ -11,8 +11,8 @@
 - For PR workflows from forks, GitHub tokens are often read-only (docs PR creation may be disabled by policy)
 
 ## Environment Variables (minimum)
-- `OPENAI_API_KEY`: Your OpenAI API key. Use your OpenRouter key when `AI_BASE_URL` is set to `https://openrouter.ai/api/v1`.
-- `AI_BASE_URL`: The base URL for your AI service. Example for OpenRouter: `https://openrouter.ai/api/v1`.
+- `OPENAI_API_KEY`: Your OpenAI API key. Use your OpenRouter key when `AI_BASE_URL` is set to `https://openrouter.ai/v1`.
+- `AI_BASE_URL`: The base URL for your AI service. Example for OpenRouter: `https://openrouter.ai/v1`.
 - `AI_MODEL`: The AI model to use (e.g., "gpt-3.5-turbo").
 - `GITHUB_TOKEN`: Required for GitHub pull request comments and creation.
 

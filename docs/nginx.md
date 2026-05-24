@@ -4,7 +4,7 @@ This document details the Nginx configuration used within the project.
 
 ## Configuration File
 
-The primary Nginx configuration file is located at: `web/nginx.conf`. This file defines how Nginx serves the web application. Refer to the file itself for detailed configuration specifics.
+The primary Nginx configuration file is located at: `web/nginx.conf`. This file defines how Nginx serves the web application. Refer to this file for detailed configuration specifics.
 
 ## Usage
 

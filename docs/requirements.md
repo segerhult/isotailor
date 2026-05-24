@@ -36,5 +36,3 @@ Configuration for Version Control System (VCS) integration.
 
 ## Data Storage
 Data, including uploaded ISOs and configuration, is stored locally in the `./data` directory. It’s recommended to back up this directory to prevent loss of data.
-
-NO_CHANGE

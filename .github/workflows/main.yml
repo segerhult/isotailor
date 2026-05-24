@@ -5,29 +5,37 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   issues: write
 
 jobs:
   orchestra:
     runs-on: ubuntu-latest
-    environment: Orchestra
+    if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        persist-credentials: true
-        token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: actions/setup-node@v4
-      with:
-        node-version: '20'
-    - name: Run Orchestra doc-gen
-      run: npx orchestra-ai-devops doc-gen .
-      env:
-        OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-        AI_BASE_URL: https://openrouter.ai/api/v1
-        AI_MODEL: openai/gpt-oss-20b
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        ORCHESTRA_ROLE_ROUTING: prefer
-        ORCHESTRA_DOCS_PR: '1'
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+          persist-credentials: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auth git for push
+        run: git remote set-url origin https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Orchestra doc-gen
+        run: npx orchestra-ai-devops doc-gen .
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AI_BASE_URL: https://openrouter.ai/api/v1
+          AI_MODEL: qwen/qwen-2.5-7b-instruct
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORCHESTRA_ROLE_ROUTING: prefer
+          ORCHESTRA_DOCS_PR: '1'

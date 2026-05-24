@@ -25,7 +25,7 @@ This document outlines the setup required to run the application, including envi
 
 ## Running the application
 
-The application's backend and frontend are containerized using Docker. The backend is built from `Dockerfile` and the frontend from `web/Dockerfile`.  Refer to the [Docker Compose documentation](docker-compose.yml) for configuration details.
+The application's backend and frontend are containerized using Docker. The backend is built from `Dockerfile` and the frontend from `web/Dockerfile`. Refer to the [Docker Compose documentation](docker-compose.yml) for configuration details.
 
 ### Backend
 

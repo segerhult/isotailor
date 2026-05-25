@@ -20,3 +20,13 @@ Data, including uploaded ISOs and configuration, is stored locally in the `./dat
 
 ## API
 For developers, the isotailor API is available at `/api`.
+
+## Documentation
+
+- [Project Requirements](docs/requirements.md)
+- [Local Development Setup](docs/local-setup.md)
+- [Docker Configuration](docs/docker.md)
+- [Nginx Configuration](docs/nginx.md)
+- [CI/CD Pipelines](docs/pipelines.md)
+- [Deployment Guide](docs/deployment.md)
+- [OpenAPI](docs/OPENAPI.md)

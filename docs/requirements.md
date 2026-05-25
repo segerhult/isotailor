@@ -4,11 +4,12 @@
 - Python 3.11
 
 ## System Packages
-- git (recommended, required for git diff / PR workflows)
+- git (recommended)
 
-## CI Requirements
+## CI
 - GitHub Actions: set `permissions.contents: write` if Orchestra should push branches for docs PRs
 - For PR workflows from forks, GitHub tokens are often read-only (docs PR creation may be disabled by policy)
+- Document required secrets and permissions in the Pipelines documentation.
 
 ## Environment Variables (minimum)
 - `OPENAI_API_KEY`: Your OpenAI API key. Use your OpenRouter key when `AI_BASE_URL` is set to `https://openrouter.ai/api/v1`.
@@ -33,6 +34,7 @@ Configuration for Version Control System (VCS) integration.
 
 ## Commands
 - Run docs generator: `npx orchestra-ai-devops doc-gen . structure`
+- Add the common build/test commands for this repository here.
 
 ## Data Storage
 Data, including uploaded ISOs and configuration, is stored locally in the `./data` directory. It’s recommended to back up this directory to prevent loss of data.

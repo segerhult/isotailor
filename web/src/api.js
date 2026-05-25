@@ -20,6 +20,30 @@ export async function fetchJson(path, init) {
   return body;
 }
 
+export function isoDownloadUrl(uploadId) {
+  return apiUrl(`/api/uploads/${uploadId}/iso`);
+}
+
+export async function getHealth() {
+  return fetchJson("/api/health");
+}
+
+export async function getDefaultSoftware() {
+  return fetchJson("/api/default-software");
+}
+
+export async function listUploads() {
+  return fetchJson("/api/uploads");
+}
+
+export async function getUpload(uploadId) {
+  return fetchJson(`/api/uploads/${uploadId}`);
+}
+
+export async function getInstallManifest(uploadId) {
+  return fetchJson(`/api/uploads/${uploadId}/manifest`);
+}
+
 export async function uploadIso({ file, software, customSoftware }) {
   const form = new FormData();
   form.append("iso", file);

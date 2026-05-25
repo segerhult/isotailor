@@ -102,7 +102,16 @@
 </template>
 
 <script>
-import { apiUrl, deleteUpload, fetchJson, updateSoftware, uploadIso } from "./api.js";
+import {
+  deleteUpload,
+  getDefaultSoftware,
+  getInstallManifest,
+  getUpload,
+  isoDownloadUrl,
+  listUploads,
+  updateSoftware,
+  uploadIso
+} from "./api.js";
 
 function softwareToCustomText(defaults, selected) {
   const setDefaults = new Set(defaults);
@@ -142,7 +151,7 @@ export default {
     },
     isoDownloadHref() {
       if (!this.selected) return "#";
-      return apiUrl(`/api/uploads/${this.selected.id}/iso`);
+      return isoDownloadUrl(this.selected.id);
     },
     manifestText() {
       return this.manifest ? JSON.stringify(this.manifest, null, 2) : "{\n  \"install\": null\n}";
@@ -156,10 +165,7 @@ export default {
       this.busy = true;
       this.create.error = "";
       try {
-        const [defaults, uploads] = await Promise.all([
-          fetchJson("/api/default-software"),
-          fetchJson("/api/uploads")
-        ]);
+        const [defaults, uploads] = await Promise.all([getDefaultSoftware(), listUploads()]);
         this.defaultSoftware = defaults.default_software || [];
         this.uploads = uploads.uploads || [];
         if (this.selectedId) {
@@ -203,7 +209,7 @@ export default {
       this.edit.error = "";
       try {
         this.selectedId = id;
-        const resp = await fetchJson(`/api/uploads/${id}`);
+        const resp = await getUpload(id);
         this.selected = resp.upload;
         const selectedSoftware = Array.isArray(this.selected.software) ? this.selected.software : [];
         this.edit.software = extractDefaultSelections(this.defaultSoftware, selectedSoftware);
@@ -237,7 +243,7 @@ export default {
       this.busy = true;
       this.edit.error = "";
       try {
-        const resp = await fetchJson(`/api/uploads/${this.selected.id}/manifest`);
+        const resp = await getInstallManifest(this.selected.id);
         this.manifest = resp.install;
       } catch (e) {
         this.edit.error = String(e.message || e);

@@ -11,25 +11,25 @@ The `main.yml` workflow file in the `.github/workflows/` directory defines the c
 
 The workflow utilizes the following secrets:
 
-- `GITHUB_TOKEN`:  Used for authenticating with GitHub, enabling actions like checking out code and creating pull requests.
+- `GITHUB_TOKEN`: Used for authenticating with GitHub, enabling actions like checking out code and creating pull requests.
 - `OPENROUTER_API_KEY`: Used to authenticate with the OpenAI API via OpenRouter.
 
 The workflow requires the following permissions:
 
-- `contents: write`:  Allows the workflow to modify files within the repository, such as updating the documentation.
+- `contents: write`: Allows the workflow to modify files within the repository, such as updating the documentation.
 - `pull-requests: write`: Allows the creation and updating of pull requests.
 - `issues: write`: Allows the creation and updating of issues.
 
 **Outputs/Artifacts:**
 
-The workflow generates documentation using the `orchestra-ai-devops doc-gen` command. This command structure documents the repository. No specific artifacts are explicitly defined in the workflow file.
+The workflow generates documentation using the `orchestra-ai-devops doc-gen` command. The command structures and generates repository documentation. No specific artifacts are explicitly defined in the workflow file.
 
 ## Local Equivalents
 
-Local development and testing should mirror the CI checks.  While specific commands aren't outlined in the provided context, typical development workflows would include:
+Local development and testing should mirror the CI checks. While specific commands aren't outlined in the provided context, typical development workflows would include:
 
-- **Linting:**  Ensure code style consistency. (Command not specified)
-- **Testing:** Validate code functionality. (Command not specified)
-- **Building:** Prepare the application for deployment. (Command not specified)
+- **Linting:** Ensure code style consistency.
+- **Testing:** Validate code functionality.
+- **Building:** Prepare the application for deployment.
 
 These commands are not defined in the provided context.

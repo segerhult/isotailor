@@ -1,78 +1,108 @@
 # Deployment
 
-This repository is a fullstack application composed of a Python-based backend API server and a Vue.js-based frontend web application, served using NGINX. The deployment process leverages Docker and Docker Compose for containerization, ensuring consistency across development, staging, and production environments. Below is a comprehensive guide covering environment requirements, dependencies, building, running, configuration, and advanced deployment considerations.
+This repository is a fullstack application composed of a Python-based backend API server and a Vue.js-based frontend web application, served using NGINX within a containerized environment. The backend (`server.py`) is a lightweight, asynchronous Python HTTP service built on `aiohttp`, exposing RESTful endpoints such as `/api/software`, `/api/manifest`, and file upload routes (`/api/upload`, `/api/uploads`). The frontend is a Vue 3 Single Page Application (SPA), constructed with Vite and served statically via NGINX, which also acts as a reverse proxy to route API requests to the backend service on port `8080`.
+
+All services—frontend, backend, and optional database—are designed to be deployed using Docker and orchestrated via Docker Compose. This ensures reproducibility across environments, eliminates dependency conflicts, and abstracts platform-specific concerns. The application is not intended for native deployment in production due to the tight coupling of the build artifacts, configuration files (e.g., NGINX reverse proxy), and container networking; however, a manual deployment path is included for advanced users requiring debugging or prototyping capabilities.
+
+The structure enforces separation of concerns: the backend Dockerfile (`Dockerfile` at repository root) builds a minimal Python 3.11-slim image for the API, while the frontend Dockerfile (`web/Dockerfile`) packages a prebuilt static web directory into an `nginx:alpine` image, leveraging multi-stage builds for minimal image size and attack surface.
 
 ---
 
 ## Prerequisites
 
-Before deploying the application, ensure the following tools are installed on your target machine:
+Before beginning deployment, ensure the following tools are installed and accessible via your system's command-line interface.
 
-- **Docker Engine**: Version 20.10 or newer. Install via:
-  - **Ubuntu/Debian**:  
-    ```bash
-    sudo apt-get update && sudo apt-get install docker.io docker-compose-plugin
-    ```
-  - **macOS (Homebrew)**:  
-    ```bash
-    brew install docker docker-compose
-    ```
-  - **Windows (WSL2)**: Install Docker Desktop for Windows, which includes both Docker Engine and Docker Compose.
+### System-Level Requirements
 
-- **Docker Compose**: Recommended as a standalone plugin (`docker compose` subcommand) or as a separate binary (`docker-compose`). Verify with:
+- **Docker Engine**: Version 20.10 or newer required to support modern Docker Compose features. Install via:
+  - **Ubuntu/Debian (Linux)**:
+    ```bash
+    sudo apt-get update
+    sudo apt-get install docker.io docker-compose-plugin
+    sudo usermod -aG docker $USER  # Re-login to apply group changes
+    ```
+  - **macOS (Homebrew)**:
+    ```bash
+    brew install --cask docker
+    # After first launch of Docker Desktop, verify:
+    brew install docker-compose
+    ```
+  - **Windows (WSL2 distro)**:
+    - Install [Docker Desktop for Windows](https://docs.docker.com/desktop/install/windows-install/).
+    - Enable WSL2 integration for your distro in Docker Desktop settings.
+    - Verify from within WSL: `docker --version && docker compose version`.
+
+- **Docker Compose Plugin**: Use the integrated `docker compose` (v2) command. Ensure compatibility via:
   ```bash
   docker compose version
+  # Expected output: Docker Compose version v2.x.x
   ```
 
-- **Git**: Required to clone the repository. Install via your OS package manager or download from [git-scm.com](https://git-scm.com/).
+- **Git**: Required to clone the repository and manage versioning. Install via:
+  ```bash
+  # Ubuntu/Debian
+  sudo apt-get install git
+  # macOS (Homebrew)
+  brew install git
+  # Windows (via Git for Windows)
+  ```
 
-> **Note**: While Docker simplifies deployment, if you choose to run the application natively (not recommended), you must separately install:
-> - Python 3.11+ and `pip` (for the backend)
-> - Node.js 18+ and `npm` (for building the frontend)
->
-> However, native deployment requires manual dependency resolution, port configuration, and static asset serving—Docker is strongly preferred.
+### Optional Native Requirements (Not Recommended)
+
+While the application is designed for containerized execution, developers may wish to test or debug locally. This approach is **not recommended for production**, as it requires managing:
+- **Python 3.11+** and **`pip`**: Required to run `server.py` directly. Install via your OS package manager or [pyenv](https://github.com/pyenv/pyenv). Ensure `pip` is version 22+:
+  ```bash
+  python -m pip install --upgrade pip
+  ```
+- **Node.js 18+** and **`npm`**: Needed to build the Vue.js frontend. Prefer using [nvm](https://github.com/nvm-sh/nvm):
+  ```bash
+  nvm install 18 && nvm use 18
+  npm -v  # Should be ≥ 9.x
+  ```
+
+> **Warning**: Native deployments require additional setup for CORS, SSL termination, directory permissions (e.g., `data/`), and NGINX reverse proxy configuration. Use Docker unless absolutely necessary.
 
 ---
 
 ## Repository Structure Overview
 
-Understanding the structure is crucial for deployment decisions:
+A clear understanding of the layout is essential for diagnosing build failures, configuration mismatches, or networking issues.
 
 ```
 .
-├── .dockerignore           # Excludes unnecessary files from backend build context
-├── .gitignore              # Git ignore rules (development artifacts)
-├── Dockerfile              # Backend image: built from python:3.11-slim
-├── docker-compose.yml      # Orchestrates frontend + backend services
-├── server.py               # Python backend (simple HTTP server)
+├── .dockerignore           # Prevents unnecessary files (e.g., __pycache__, .env) from entering backend build context
+├── .gitignore              # Standard ignore patterns for development (IDE configs, logs)
+├── .github/
+│   └── workflows/
+│       └── main.yml        # GitHub Actions CI pipeline: runs `docker compose build` and unit tests
+├── Dockerfile              # Backend image: `python:3.11-slim` base, copies only `server.py`, installs `aiohttp`
+├── docker-compose.yml      # Service orchestration: defines `web` (NGINX), `app` (backend), and `db` (PostgreSQL)
+├── server.py               # Python HTTP server (aiohttp), listening on `0.0.0.0:8080`
+├── README.md
 ├── web/
-│   ├── .dockerignore       # Frontend build context exclusions
-│   ├── Dockerfile          # NGINX-based frontend image
-│   ├── nginx.conf          # Static asset server and reverse proxy config
-│   ├── package.json        # Vue.js dependencies (including Vite)
-│   ├── vite.config.js      # Vite build configuration
+│   ├── .dockerignore       # Excludes `node_modules`, `.git`, and debug assets from frontend build context
+│   ├── Dockerfile          # Multi-stage: `node:18-alpine` for build → `nginx:alpine` for runtime
+│   ├── nginx.conf          # NGINX config: serves static files, proxies `/api/...` to `http://backend:8080`
+│   ├── package.json        # Vue 3 + Vite dependencies, scripts (`build`, `dev`)
+│   ├── vite.config.js      # Vite config: `build.outDir` set to `dist`, `base: ''` for SPA compatibility
 │   └── src/
-│       ├── App.vue
-│       ├── api.js          # API client module
-│       └── main.js
-└── README.md
+│       ├── App.vue         # Root Vue component
+│       ├── api.js          # API client: axios/`fetch` wrapper, sets `baseURL: import.meta.env.VITE_API_BASE`
+│       └── main.js         # Vue app bootstrap
 ```
 
-The backend (`server.py`) is a lightweight Python HTTP service listening on port `8080` (default). The frontend is a Vue.js Single Page Application (SPA) built with Vite, served statically via NGINX on port `80`.
+Key observations:
+- **Backend** (`Dockerfile`): Minimal `COPY` of `server.py` only. Relies on `python:3.11-slim`'s `pip` to install dependencies if `requirements.txt` exists (currently none).
+- **Frontend** (`web/Dockerfile`): Two-stage build:
+  1. Installs Node.js dependencies, builds with `vite build`.
+  2. Copies `dist/` into `nginx:alpine`, replaces default config with `web/nginx.conf`.
+- **NGINX**: `nginx.conf` is critical for SPA support (`try_files $uri /index.html`) and API routing (`proxy_pass http://backend:8080/api`).
 
 ---
 
 ## Build and Run with Docker Compose
 
-The simplest way to deploy the application is using `docker-compose.yml`. This file defines three services:
-
-| Service Name | Image Context | Role                        | Ports         |
-|--------------|---------------|-----------------------------|---------------|
-| `web`        | `nginx:alpine`| NGINX reverse proxy and static file server | `80:80`, `443:443` |
-| `app`        | `./app`       | Backend application (Not present yet in repo root) | Internal only |
-| `db`         | `postgres:15-alpine` | PostgreSQL database | `5432:5432` |
-
-> **Note**: The `docker-compose.yml` file includes references to services (`app`, `db`) that are not yet implemented in the root directory, but the configuration is provided as a baseline template.
+Docker Compose simplifies deployment by managing service dependencies, networking, and volume mounts in one command.
 
 ### 1. Clone the Repository
 
@@ -81,35 +111,56 @@ git clone <repository-url>
 cd <repo-name>
 ```
 
-### 2. Build and Start Containers
+### 2. Initialize Required Directories
+
+Before first run, ensure critical directories exist:
+
+```bash
+mkdir -p data
+chmod -R 755 data  # Backend requires write access for uploads/manifests
+```
+
+### 3. Build and Start Services
 
 ```bash
 docker compose up --build -d
 ```
 
 This command:
-- Builds images as defined (currently only the NGINX web service and PostgreSQL database).
-- Starts containers in detached mode.
-- Automatically creates a user-defined bridge network for inter-service communication.
-- Maps `localhost:80` → frontend (NGINX), `localhost:5432` → database.
+- Builds the `web` service using `web/Dockerfile` (frontend build → NGINX image).
+- Builds the `app` service (if `Dockerfile` at root is updated) using the base Python image.
+- Pulls and starts the `db` service from `postgres:15-alpine` (if enabled).
+- Creates a custom bridge network (`<project>_default`) for internal DNS resolution (e.g., `backend` → `app` service).
+- Exposes ports:
+  - `80` → Frontend (via NGINX).
+  - `5432` → PostgreSQL (if `db` service active).
+  - **Do not expose `8080` directly** (backend is internal-only).
 
-> **Note**: The `app` service build context is set to `./app` but no corresponding Dockerfile exists yet. You must create this directory and Dockerfile before the full stack can run.
+### 4. Verify Service Status
 
-To verify services are running:
+Check running containers:
+
 ```bash
 docker compose ps
+# Expected output shows `web`, `app`, `db` as `Up`
 ```
 
-To check logs in real-time:
+View live logs:
+
 ```bash
 docker compose logs -f
+# Look for: "Application startup complete." (backend), "nginx: [notice] signal process started" (web)
 ```
 
-### 3. Access the Application
+### 5. Access the Application
 
-- **Frontend UI**: Open `http://localhost` in a browser.
-- **Backend API**: Access at `http://localhost:8080` (once backend is properly integrated).
-- **API Client Behavior**: The Vue frontend (`web/src/api.js`) uses relative paths (e.g., `/api/...`) under the assumption that NGINX (port 80) proxies requests to the backend.
+- **Frontend UI**: Open `http://localhost` in your browser.
+- **Backend API**: Unreachable directly from host (as intended). Use NGINX proxy at `http://localhost/api/software`.
+- **Test Endpoints**:
+  ```bash
+  curl http://localhost/api/software
+  curl -X POST http://localhost/api/manifest -H "Content-Type: application/json" -d '{"os":"Ubuntu","version":"22.04"}'
+  ```
 
 ---
 
@@ -117,66 +168,96 @@ docker compose logs -f
 
 ### Backend (`server.py`)
 
-The backend server (`server.py`) runs directly on port `8080` and does not currently use environment variables. It serves the following:
-- Root path `/` — HTML form for software selection.
-- `GET /api/software` — returns list of available software.
-- `POST /api/manifest` — builds and returns a custom ISO installation manifest.
-- File upload endpoints: `/api/upload` and `/api/uploads`.
+Currently, the backend uses **no environment variables** and runs directly on port `8080`. All configuration is hardcoded (e.g., `data/` paths, allowed origins). If future versions introduce environment variables (e.g., `DB_HOST`, `SECRET_KEY`), they should be configured via:
 
-If environment variables are introduced in future versions (e.g., for database or external service configuration), they should be set via:
-- A `.env` file in the project root (for local dev):
+- **Local Development**: Create a `.env` file in the project root:
   ```env
-  SECRET_KEY=my-very-secret-key
+  DB_HOST=host.docker.internal
+  DB_PORT=5432
+  SECRET_KEY=dev-only-secret
   ```
-- Docker secrets (production).
-- Host-level environment variables (if using `docker-compose --env-file`).
+- **Docker Compose**: Reference variables in `docker-compose.yml`:
+  ```yaml
+  services:
+    app:
+      environment:
+        - DB_HOST=db
+        - SECRET_KEY=${SECRET_KEY}
+  ```
+- **Production**: Use Docker secrets or a secrets manager (e.g., HashiCorp Vault).
 
 ### Frontend (`web/`)
 
-Static configuration is baked into the NGINX config (`web/nginx.conf`), which includes:
-- `try_files $uri /index.html;` for SPA routing.
-- Proxy pass to `http://backend:8080/api` for API requests (subject to `docker-compose.yml` network naming).
+Frontend configuration is injected at **build time** using Vite’s environment variable system. Create `web/.env.production`:
 
-Dynamic frontend config (e.g., API base URL) is typically injected at build time. Vite supports `.env` files in the frontend directory:
-- Create `web/.env.production`:
-  ```env
-  VITE_API_BASE=/api
-  ```
-- This gets resolved at build time (`vite.config.js` should include `defineConfig({ define: { 'process.env': {} } })` or use Vite’s `import.meta.env`).
+```env
+VITE_API_BASE=/api
+VITE_APP_TITLE="My Custom ISO Builder"
+```
+
+Vite exposes these as `import.meta.env.VITE_API_BASE` in the code (see `web/src/api.js`). Ensure `vite.config.js` does not override `defineConfig({ define: { 'process.env': {} } })` if using legacy `process.env`.
+
+The `nginx.conf` contains static configuration:
+```nginx
+server {
+  listen 80;
+  location / {
+    root /usr/share/nginx/html;
+    try_files $uri $uri/ /index.html;  # Enables Vue Router history mode
+  }
+  location /api {
+    proxy_pass http://backend:8080/api;  # Matches backend's listening host:port
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+}
+```
+
+Ensure `http://backend:8080/api` matches the Docker service name and port.
 
 ---
 
 ## Manual Deployment (Advanced)
 
-While Docker Compose is the recommended method, you may deploy services individually.
+While Docker is preferred, ad-hoc testing or edge-case debugging may require manual deployment.
 
 ### Backend (Python)
 
-1. **Run the server**:
+1. Install dependencies (if any in `requirements.txt`):
+   ```bash
+   pip install aiohttp
+   ```
+2. Create the `data/` directory:
+   ```bash
+   mkdir -p data && chmod 755 data
+   ```
+3. Run the server:
    ```bash
    python server.py
+   # Server starts on http://0.0.0.0:8080
    ```
-
-2. Ensure the `data/` directory exists and is writable (for uploads and manifests).
+4. **CORS**: Configure `aiohttp_cors` in `server.py` to allow requests from `localhost:5173` (dev server) or `localhost` (NGINX).
 
 ### Frontend (Vue.js + NGINX)
 
-1. **Build the SPA**:
+1. Build the static assets:
    ```bash
    cd web
-   npm ci && npm run build
+   npm ci  # Ensures exact dependency versions from package-lock.json
+   npm run build
+   # Generates `web/dist/`
    ```
-
-2. **Serve static files** with NGINX:
+2. Start NGINX with custom config:
    ```bash
    docker run -d \
+     --name frontend \
      -p 80:80 \
      -v $(pwd)/dist:/usr/share/nginx/html:ro \
      -v $(pwd)/nginx.conf:/etc/nginx/conf.d/default.conf:ro \
      nginx:alpine
    ```
 
-> **Caution**: This method does not handle API proxying unless `nginx.conf` correctly routes `/api` requests to the backend.
+> **Critical**: If `nginx.conf` does not proxy `/api` to `http://localhost:8080`, API calls will fail. Use `http://host.docker.internal:8080` inside NGINX if running on Docker Desktop (macOS/Windows).
 
 ---
 
@@ -184,11 +265,11 @@ While Docker Compose is the recommended method, you may deploy services individu
 
 | Area              | Recommendation                                                                 |
 |-------------------|--------------------------------------------------------------------------------|
-| **Security**      | - Never expose backend (`8080`) directly to the public internet.<br>- Use HTTPS (terminate TLS at NGINX or a reverse proxy like Traefik).<br>- Set environment variables for secrets if introduced. |
-| **Scalability**   | - Scale the backend service once deployed in Docker.<br>- Use a process manager (e.g., `gunicorn`) if running natively. |
-| **Persistence**   | - Mount volumes for persistent data (e.g., `data/` for uploaded files and manifest index).<br>- Example in `docker-compose.yml`: `volumes: - ./data:/app/data`. |
-| **Health Checks** | Add `HEALTHCHECK` instructions to `Dockerfile`s once stable.                   |
-| **CI/CD**         | The `.github/workflows/main.yml` suggests GitHub Actions integration—ensure builds and tests run on `docker compose build`. |
+| **Security**      | - **Never expose port `8080`** (backend must be internal-only).<br>- Enable TLS at NGINX: replace `nginx.conf` with one that includes `ssl_certificate` and `ssl_protocols TLSv1.3`.<br>- If `db` is used, set `POSTGRES_PASSWORD` and restrict network access. |
+| **Scalability**   | - Scale `app` service: `docker compose up --scale app=3 -d`.<br>- For production, replace `server.py` with `gunicorn -w 4 -k aiohttp.GunicornWebWorker server:app` (requires `gunicorn` and `aiohttp` dependencies). |
+| **Persistence**   | - Bind `./data` to the `app` service in `docker-compose.yml`:<br>  ```yaml<br>  app:<br>    volumes:<br>      - ./data:/app/data<br>  ```<br>- For `db`, use named volumes: `volumes: db-data:/var/lib/postgresql/data`. |
+| **Health Checks** | Add to `Dockerfile`:<br>  ```dockerfile<br>  HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \\<br>    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8080')" || exit 1<br>  ``` |
+| **CI/CD**         | The `.github/workflows/main.yml` builds and tests with `docker compose build` and `docker compose run app pytest`. Ensure no credentials are committed. |
 
 ---
 
@@ -198,54 +279,68 @@ While Docker Compose is the recommended method, you may deploy services individu
 
 | Symptom                        | Likely Cause                                      | Fix                                                                 |
 |--------------------------------|---------------------------------------------------|----------------------------------------------------------------------|
-| `frontend` fails to start      | NGINX config syntax error                         | Validate `web/nginx.conf` using `nginx -t` in a dev container.     |
-| API calls fail (404/502)       | Mismatched proxy target in `nginx.conf`          | Ensure `proxy_pass` points to correct host:port (`http://backend:8080/api`). |
-| Backend connection refused     | Services not on same Docker network              | Confirm `docker-compose.yml` defines a shared network.             |
-| Vue app shows blank page       | Missing `history` mode support in NGINX          | Confirm `try_files $uri /index.html;` is in `nginx.conf`.          |
-| Upload or manifest fails       | `data/` directory missing or not writable        | Create `data/` directory with correct permissions.                 |
+| `docker compose up` fails with `ERROR: Service 'web' failed to build` | Frontend build missing `node_modules` or `dist` | Run `npm ci` manually in `web/` to debug. Check `web/.dockerignore`. |
+| `502 Bad Gateway` on `/api/...` | Backend not running or misnamed Docker service    | Check `docker compose ps` for `app` status. Verify `proxy_pass` in `nginx.conf` uses correct service name (`http://backend:8080` vs `http://app:8080`). |
+| Vue app shows blank page       | NGINX missing `try_files $uri /index.html;`     | Confirm `web/nginx.conf` includes SPA fallback. Validate with `nginx -t`. |
+| Uploads fail (`413 Request Entity Too Large`) | NGINX default body size limit (1MB)           | Add `client_max_body_size 10M;` to `nginx.conf`. |
+| `Connection refused` (backend) | Backend container not on same Docker network    | Ensure `docker-compose.yml` uses a custom network (default `bridge` lacks DNS). |
 
 ### Debugging Tips
 
-- **Inspect container logs**:
+- **Inspect Container Logs**:
   ```bash
-  docker compose logs web db
+  docker compose logs --tail=100 web app db
+  # Look for Python tracebacks, NGINX errors, or PostgreSQL startup issues.
   ```
-- **Exec into a running container**:
+- **Exec into Running Containers**:
   ```bash
-  docker compose exec web sh
-  docker compose exec db sh
+  docker compose exec app bash  # Debug backend
+  docker compose exec web sh    # Inspect NGINX config
+  docker compose exec db psql -U postgres -c '\l'  # List PostgreSQL DBs
   ```
-- **Check backend health**:
+- **Test Backend Connectivity**:
   ```bash
-  curl http://localhost:8080/
+  docker compose exec web curl -v http://app:8080/api/software
+  ```
+- **Validate NGINX Config**:
+  ```bash
+  docker compose exec web nginx -t
   ```
 
 ---
 
 ## Updating the Application
 
-To deploy a new version:
+To deploy a new release:
 
-1. Pull latest code:
+1. Pull latest changes:
    ```bash
    git pull origin main
    ```
-
-2. Rebuild and restart services:
+2. Rebuild and restart:
    ```bash
    docker compose up --build -d
    ```
+3. Verify logs:
+   ```bash
+   docker compose logs -f
+   ```
 
-No manual cache clearing or configuration migration is needed if only code changes—Docker ensures idempotent builds.
+> **Important**: Data persistence depends on your `docker-compose.yml` configuration. If `./data` is not mounted as a volume, uploaded files/manifests will be lost on restart.
 
-> **Note**: For data schema changes or persistent storage enhancements (e.g., `data/uploads.json`), implement them in `server.py` and verify migration logic before deployment.
+For database migrations or data model changes:
+1. Modify `server.py` with migration logic (e.g., `data/uploads.json` schema update).
+2. Deploy with `docker compose up -d`.
+3. Verify compatibility with existing data (e.g., handle `KeyError` in `POST /api/manifest`).
 
 ---
 
 ## Support & Further Reading
 
 - [Docker Documentation](https://docs.docker.com/)
-- [Vue CLI Deployment Guide](https://vuejs.org/guide/scaling-up/tooling.html#build-tools)
-- [NGINX Reverse Proxy Configuration](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
+- [Vue.js Deployment Guide](https://vuejs.org/guide/scaling-up/tooling.html#build-tools)
+- [NGINX Reverse Proxy Tutorial](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
+- [AIOHTTP Production Deployment](https://docs.aiohttp.org/en/stable/deployment.html)
+- [Docker Compose Best Practices](https://docs.docker.com/compose/best-practices/)
 
-This deployment guide is versioned with the repository. Refer to `docker-compose.yml`, `Dockerfile`, and `server.py` for runtime specifics.
+This deployment guide is versioned with the repository and reflects the current implementation (`server.py`, `web/`, `docker-compose.yml`). Always reference the latest source files for runtime specifics.

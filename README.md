@@ -23,11 +23,11 @@ For developers, the isotailor API is available at `/api`.
 
 ## Documentation
 
-- [API Reference](docs/api.md)
+- [API Documentation](docs/api.md)
 - [Local Development Setup](docs/local-setup.md)
-- [Docker Deployment](docs/docker.md)
-- [CI/CD Pipeline](docs/pipelines.md)
+- [Docker Setup](docs/docker.md)
 - [Nginx Configuration](docs/nginx.md)
+- [CI/CD Pipelines](docs/pipelines.md)
 - [Testing Guide](docs/testing.md)
-- [Deployment Guide](docs/deployment.md)
+- [Deployment Instructions](docs/deployment.md)
 - [Changelog](docs/changelog.md)

@@ -2,7 +2,7 @@ name: Dynamic docs
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened]
 
 permissions:
   contents: write

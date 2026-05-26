@@ -1,5 +1,6 @@
 import argparse
 import cgi
+import hashlib
 import html
 import json
 import os
@@ -97,6 +98,30 @@ def build_install_manifest(software: list[str]) -> dict:
     }
 
 
+def build_install_script(software: list[str]) -> str:
+    packages = normalize_software_list(software)
+    lines = [
+        "#!/usr/bin/env sh",
+        "set -eu",
+        "",
+        "sudo apt-get update",
+    ]
+    if packages:
+        lines.append("sudo apt-get install -y " + " ".join(packages))
+    else:
+        lines.append("echo 'No packages selected.'")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def sha256_file(file_path: Path) -> str:
+    h = hashlib.sha256()
+    with file_path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def page(title: str, body: str) -> bytes:
     doc = f"""<!doctype html>
 <html lang="en">
@@ -171,6 +196,15 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
         with file_path.open("rb") as f:
             shutil.copyfileobj(f, self.wfile, length=1024 * 1024)
 
+    def send_text(self, status: int, text: str, content_type: str) -> None:
+        body = text.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def redirect(self, location: str) -> None:
         self.send_response(HTTPStatus.SEE_OTHER)
         self.send_header("Location", location)
@@ -215,7 +249,7 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
     def do_OPTIONS(self) -> None:
         self.send_response(HTTPStatus.NO_CONTENT)
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS,HEAD")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
 
@@ -277,6 +311,7 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+        query = parse_qs(parsed.query, keep_blank_values=True)
 
         if path == "/api/health":
             self.send_json(HTTPStatus.OK, {"ok": True, "time": now_iso()})
@@ -284,6 +319,26 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
 
         if path == "/api/default-software":
             self.send_json(HTTPStatus.OK, {"default_software": DEFAULT_SOFTWARE})
+            return
+
+        if path == "/api/stats":
+            index = load_index()
+            uploads = index.get("uploads", {})
+            total_bytes = 0
+            for meta in uploads.values():
+                iso_rel = meta.get("iso_path", "")
+                if not iso_rel:
+                    continue
+                file_path = (REPO_ROOT / iso_rel).resolve()
+                if file_path.exists() and file_path.is_file():
+                    try:
+                        total_bytes += file_path.stat().st_size
+                    except OSError:
+                        pass
+            self.send_json(
+                HTTPStatus.OK,
+                {"uploads_count": len(uploads), "total_iso_bytes": total_bytes, "time": now_iso()},
+            )
             return
 
         if path == "/api/uploads":
@@ -317,6 +372,30 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
                 if len(parts) == 4 and parts[3] == "manifest":
                     manifest = build_install_manifest(meta.get("software", []))
                     self.send_json(HTTPStatus.OK, {"upload": meta, "install": manifest})
+                    return
+
+                if len(parts) == 4 and parts[3] == "install-script":
+                    script = build_install_script(meta.get("software", []))
+                    self.send_text(HTTPStatus.OK, script, "text/x-shellscript; charset=utf-8")
+                    return
+
+                if len(parts) == 4 and parts[3] == "info":
+                    iso_rel = meta.get("iso_path", "")
+                    file_path = (REPO_ROOT / iso_rel).resolve()
+                    iso = {"path": iso_rel, "exists": False}
+                    if file_path.exists() and file_path.is_file():
+                        iso["exists"] = True
+                        try:
+                            iso["size_bytes"] = file_path.stat().st_size
+                        except OSError:
+                            iso["size_bytes"] = None
+                        wants_sha = query.get("sha256", ["0"])[0] in {"1", "true", "yes"}
+                        if wants_sha:
+                            try:
+                                iso["sha256"] = sha256_file(file_path)
+                            except OSError:
+                                iso["sha256"] = None
+                    self.send_json(HTTPStatus.OK, {"upload": meta, "iso": iso})
                     return
 
         if path.startswith("/api/"):

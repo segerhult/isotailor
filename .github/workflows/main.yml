@@ -45,4 +45,4 @@ jobs:
           ORCHESTRA_ROLE_ROUTING: prefer
           ORCHESTRA_DOCS_PR: '1'
         
-        run: npx orchestra-ai-devops doc-gen . structure
+        run: npx orchestra-ai-devops doc-gen . 

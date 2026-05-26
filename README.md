@@ -23,10 +23,9 @@ For developers, the isotailor API is available at `/api`.
 
 ## Documentation
 
-- [Requirements](docs/requirements.md)
-- [Environment Variables](docs/environment.md)
 - [API Reference](docs/api.md)
+- [OpenAPI Specification](docs/OPENAPI.md)
 - [Architecture Overview](docs/architecture.md)
-- [Security Considerations](docs/security.md)
 - [Deployment Guide](docs/deployment.md)
-- [OpenAPI](docs/OPENAPI.md)
+- [Docker Setup and Usage](docs/docker.md)
+- [CI/CD Pipelines](docs/pipelines.md)

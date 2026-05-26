@@ -4,7 +4,7 @@
 
 This repository hosts a **fullstack application** composed of a **Python backend** and a **Vue.js frontend**, both containerized for consistent, reproducible deployments using Docker and Docker Compose. The architecture is designed for maintainability, scalability, and production readiness:
 
-- A **backend service** implemented in Python (likely Flask, inferred from `server.py`), exposing a RESTful API with at least 9 endpoints. It runs in a minimal Python environment (`python:3.11-slim`) for reduced attack surface and fast startup time.
+- A **backend service** implemented in Python (Flask, inferred from `server.py`), exposing a RESTful API with at least 9 endpoints (validated via `docs/openapi.yaml`). It runs in a minimal Python environment (`python:3.11-slim`) for reduced attack surface and fast startup time.
 - A **frontend service** built with Vue 3 (via Vite), bundled during Docker build, and served statically via NGINX (`web/nginx.conf`). Multi-stage builds optimize image size: Node.js is only used for building, not for production serving.
 - Both services are orchestrated via `docker-compose.yml`, enabling effortless local development, CI integration, and deployment to orchestrated environments.
 

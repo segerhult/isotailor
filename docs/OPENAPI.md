@@ -2,89 +2,134 @@
 
 ## Specification Files
 
-The OpenAPI 3.0 specification for this project resides at `docs/openapi.yaml`. This file serves as the single source of truth for all RESTful API endpoints exposed by the backend (`server.py`) and consumed by the frontend (`web/src/api.js`). The spec is written in YAML format, aligned with the OpenAPI Specification v3.0.3, and includes comprehensive definitions for paths, methods, request parameters, request/response bodies, security schemes, and data models.
+The OpenAPI 3.0.3 specification for this fullstack application resides at `docs/openapi.yaml`. This file serves as the authoritative contract between the backend (`server.py`) and the frontend (`web/src/api.js`), defining all RESTful API endpoints, their parameters, request/response bodies, authentication mechanisms, and reusable data models.
 
-The spec is validated and kept up-to-date as part of the CI/CD pipeline (`.github/workflows/main.yml`). Any changes to the backend route definitions in `server.py`—especially those modifying path signatures, HTTP methods, expected payloads, or response structures—must be reflected in `docs/openapi.yaml` to maintain consistency across documentation, client SDK generation, and testing tooling.
+The specification is maintained as a single source of truth to support multiple critical workflows:
+- **Interactive Documentation**: Generated via Swagger UI, available at `/docs` on the frontend server.
+- **Client SDK Generation**: TypeScript clients are auto-generated for type-safe consumption in the React frontend.
+- **Contract Testing**: Used in CI pipelines to ensure backend changes do not introduce breaking changes.
+- **Developer Onboarding**: Provides developers with a self-service reference for API behavior and structure.
+
+All changes to backend routing, request/response payloads, or security requirements must be reflected in `docs/openapi.yaml` *before* merging code, per the CI/CD pipeline defined in `.github/workflows/main.yml`.
+
+---
 
 ## Detected Endpoints (Heuristic)
 
-The backend implements the following nine RESTful endpoints under the `/api` base path:
+The backend implements nine RESTful endpoints under the `/api` base path. Each endpoint is documented with full metadata, including required authentication, expected payloads, response structures, and edge cases.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/api/health` | Returns the health status of the backend service. Used for readiness and liveness probes. No authentication required. |
-| `GET` | `/api/default-software` | Retrieves the list of default software packages preconfigured for new uploads. Typically used to populate a default selection in the UI during upload setup. |
-| `GET` | `/api/uploads` | Lists all uploads associated with the authenticated user. Supports pagination and filtering via query parameters (e.g., `?status=pending`, `?limit=10`). Responses include upload metadata such as ID, filename, status, creation timestamp, and associated software configuration. |
-| `POST` | `/api/uploads` | Creates a new upload record and returns an upload ID. The request body must include the filename and optional metadata. The actual binary file upload is handled via a separate `PUT`/`POST` to an upload-presigned URL (not covered by this spec but referenced in the response). |
-| `GET` | `/api/uploads/{id}` | Retrieves detailed metadata for a specific upload, including status (`pending`, `processing`, `completed`, `failed`), software configuration, and associated tags. Returns a 404 if the upload ID does not exist or is inaccessible. |
-| `PUT` | `/api/uploads/{id}/software` | Updates the software configuration associated with a specific upload. The request body contains a JSON object with a `software` array listing selected software packages. Requires the upload to be in `pending` or `failed` state. |
-| `GET` | `/api/uploads/{id}/manifest` | Retrieves a structured manifest file (typically JSON) describing the contents, dependencies, and metadata of the finalized upload. Generated only after the upload has been processed and is in `completed` state. |
-| `GET` | `/api/uploads/{id}/iso` | Downloads the final ISO artifact associated with the upload. The response is served as `application/octet-stream`. Access is restricted to the owner of the upload or users with explicit share permissions. |
-| `DELETE` | `/api/uploads/{id}` | Deletes an upload and its associated metadata. May also trigger cleanup of stored artifacts (e.g., uploaded binary, ISO). Returns 204 No Content on success. May enforce soft-deletion depending on implementation. |
+| `GET` | `/api/health` | Returns service health status for infrastructure-level health checks (e.g., Kubernetes liveness). Unauthenticated. |
+| `GET` | `/api/default-software` | Retrieves a curated list of default software packages preconfigured for new uploads. Used by the frontend to initialize form defaults. |
+| `GET` | `/api/uploads` | Lists paginated uploads for the authenticated user. Supports filtering by `status`, `created_from`, and `created_to`. Includes metadata but not full artifact details. |
+| `POST` | `/api/uploads` | Creates a new upload record in `pending` state. Returns a structured response with metadata and a presigned URL for binary upload (handled separately via `PUT`). |
+| `GET` | `/api/uploads/{id}` | Retrieves detailed information for a single upload, including status transitions, associated software, and metadata. Returns `404` if not found or unauthorized. |
+| `PUT` | `/api/uploads/{id}/software` | Updates software configuration (e.g., toolchain selection) for an upload. Only allowed for uploads in `pending` or `failed` state. |
+| `GET` | `/api/uploads/{id}/manifest` | Returns a JSON manifest describing the finalized artifact (dependencies, file tree, checksums, metadata). Generated only after successful processing. |
+| `GET` | `/api/uploads/{id}/iso` | Downloads the compiled ISO file as a binary stream (`application/octet-stream`). Access is restricted to owners or explicitly shared users. |
+| `DELETE` | `/api/uploads/{id}` | Deletes the upload record and associated artifacts. May perform soft-deletion depending on configuration. Returns `204 No Content` on success. |
 
-All endpoints expect and return `application/json` payloads unless otherwise specified (e.g., the `/iso` endpoint returns binary data).
+All endpoints—except `/api/health` and `/api/uploads/{id}/iso` (which returns raw binary)—expect and return `application/json` payloads.
+
+---
 
 ## Request and Response Schemas
 
-The `components/schemas` section of `docs/openapi.yaml` defines reusable data structures used across endpoints. Key models include:
+The `components/schemas` section defines reusable data structures used throughout the API. Key models include:
 
 ### `Upload`
+A core resource representing a user-initiated build request.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `string` (UUID) | Unique identifier of the upload. |
-| `filename` | `string` | Original filename provided at creation. |
-| `status` | `string` | Current processing status: `pending`, `processing`, `completed`, or `failed`. |
-| `created_at` | `string` (ISO 8601 datetime) | Timestamp of upload creation. |
-| `updated_at` | `string` (ISO 8601 datetime) | Timestamp of the last status update. |
-| `software` | `string[]` | List of software package identifiers selected for this upload. |
-| `size` | `integer` (int64, optional) | Size of the uploaded file in bytes. Only present for completed uploads. |
+| `id` | `string` (UUID v4) | Unique identifier assigned upon creation. Immutable. |
+| `filename` | `string` | Original filename provided during `POST /api/uploads`. |
+| `status` | `string` | One of: `pending` (initial), `processing` (in flight), `completed` (ready), `failed` (irrecoverable). |
+| `created_at` | `string` (ISO 8601) | Timestamp of record creation (UTC). |
+| `updated_at` | `string` (ISO 8601) | Timestamp of the last state change (UTC). |
+| `software` | `string[]` | Array of software package IDs selected by the user (e.g., `["gcc-12", "gdb-13"]`). |
+| `size` | `integer` (int64, optional) | Size in bytes of the original binary upload. Present only after upload completes. |
+| `download_url` | `string` (optional) | Presigned URL for binary upload, returned by `POST /api/uploads`. |
+| `share_id` | `string` (optional) | Unique share token for public/authorized sharing (if enabled). |
 
 ### `SoftwarePackage`
+Represents a configurable build tool or library.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `string` | Unique identifier of the software package (e.g., `gcc-12`, `vim`). |
-| `name` | `string` | Human-readable name (e.g., `GNU Compiler Collection 12`). |
-| `version` | `string` | Package version. |
-| `description` | `string` | Optional description. |
+| `id` | `string` | Internal package identifier (e.g., `llvm-15`). |
+| `name` | `string` | Human-readable name (e.g., `LLVM Compiler Infrastructure v15`). |
+| `version` | `string` | Semantic version (e.g., `15.0.7`). |
+| `description` | `string` (optional) | Optional human-readable description. |
+| `tags` | `string[]` (optional) | Categorization tags (e.g., `["compiler", "c-family"]`). |
 
 ### `HealthCheck`
+Minimal health status for orchestration.
+
 | Field | Type | Description |
 |-------|------|-------------|
-| `status` | `string` | Always `"healthy"` when available. |
-| `timestamp` | `string` (ISO 8601 datetime) | Server time at response generation. |
+| `status` | `string` | Always `"healthy"` when service is responsive. |
+| `timestamp` | `string` (ISO 8601) | Current server time. |
+| `version` | `string` (optional) | Backend version (e.g., `2.1.0`). |
 
-Error responses follow a consistent structure defined in the `Error` schema:
+### `Error`
+Standardized error structure returned on non-2xx responses.
+
 ```yaml
 Error:
   type: object
-  required: [error]
+  required:
+    - error
   properties:
     error:
       type: object
-      required: [code, message]
+      required:
+        - code
+        - message
       properties:
         code:
           type: string
-          example: "INVALID_INPUT"
+          example: "UPLOAD_NOT_FOUND"
         message:
           type: string
-          example: "Field 'software' must be an array."
+          example: "The requested upload could not be located."
         details:
           type: array
           items:
             type: object
-          description: Optional validation fields with localized messages.
+          example:
+            - field: "software"
+              reason: "must be a non-empty array"
 ```
+
+Common `error.code` values include:
+- `UPLOAD_NOT_FOUND`: `404` when ID is invalid or inaccessible.
+- `INVALID_STATE`: `409` when an operation conflicts with current upload status (e.g., modifying software on a `completed` upload).
+- `UNAUTHORIZED`: `401` when no token or invalid token provided.
+- `FORBIDDEN`: `403` when user lacks permission for the operation.
+- `VALIDATION_ERROR`: `400` for malformed request payloads.
+
+---
 
 ## Authentication & Authorization
 
-All endpoints—except `/api/health`—require JWT-based authentication via the `Authorization` header:
+All endpoints—except `/api/health`—require authentication via JWT in the `Authorization` header:
 
 ```
 Authorization: Bearer <token>
 ```
 
-Tokens are issued by the authentication service (e.g., Auth0, custom OAuth2 provider) and validated by the backend middleware (`server.py`). The OpenAPI spec includes a `securitySchemes` section:
+The backend middleware (`server.py`) validates tokens issued by a dedicated authentication service (e.g., Auth0, custom OAuth2). Unauthorized requests return `401 Unauthorized`, while access to non-owned resources returns `403 Forbidden`.
+
+Ownership verification logic:
+- `GET /api/uploads/{id}`, `PUT /api/uploads/{id}/software`, `DELETE /api/uploads/{id}`: User must be the upload creator.
+- `GET /api/uploads/{id}/iso`: User must be owner *or* have explicit share permissions (via `share_id` or internal group membership).
+- `POST /api/uploads`: Any authenticated user may create uploads.
+- `GET /api/uploads`: Returns only uploads owned by the requesting user.
+
+The `securitySchemes` section explicitly defines this:
+
 ```yaml
 components:
   securitySchemes:
@@ -94,85 +139,152 @@ components:
       bearerFormat: JWT
 ```
 
-Access control for sensitive operations (e.g., `GET /api/uploads/{id}/iso`, `DELETE /api/uploads/{id}`) enforces ownership or explicit sharing permissions. Unauthorized or forbidden access returns HTTP `401` or `403` with a structured error payload.
+---
 
 ## Path and Parameter Conventions
 
-- Path parameters use descriptive, lowercase identifiers (e.g., `{id}` for upload identifiers).
-- Query parameters for `GET /api/uploads` support standard pagination: `limit` (default: `20`, max: `100`) and `offset` (default: `0`). Filtering by `status`, `created_from`, and `created_to` (ISO 8601 date) is supported.
-- Timestamps in request/response bodies are in UTC and formatted per ISO 8601 (`YYYY-MM-DDTHH:mm:ss.SSSZ`).
-- File upload metadata is submitted as JSON, while the binary itself is sent to a temporary presigned URL returned by the `POST /api/uploads` response.
+- **Path Parameters**: Simple, descriptive, lowercase identifiers (e.g., `{id}` for upload UUIDs). All IDs follow RFC4122 v4 format (`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`).
+- **Query Parameters** for `GET /api/uploads`:
+  - `limit`: Integer (default: `20`, max: `100`). Controls pagination size.
+  - `offset`: Integer (default: `0`). Offset for pagination.
+  - `status`: Filter by status (e.g., `?status=completed`). Accepts comma-separated list (`?status=completed,failed`).
+  - `created_from`, `created_to`: ISO 8601 timestamps for date range filtering (e.g., `?created_from=2023-01-01T00:00:00Z`).
+- **Timestamps**: All `created_at`, `updated_at`, and time-based query filters use UTC and ISO 8601 format (`YYYY-MM-DDTHH:mm:ss.SSSZ`).
+- **File Upload Flow**: Binary data is *not* sent in the API payload. Instead:
+  1. `POST /api/uploads` returns a presigned `download_url`.
+  2. The frontend uploads the binary directly to the storage backend via `PUT {download_url}`.
+  3. The backend polls or listens for upload completion events.
+
+---
 
 ## Integration with Frontend
 
-The frontend (`web/src/api.js`) consumes this API using Axios. Request interceptors attach the user’s JWT token, and response interceptors handle standardized errors (e.g., redirecting on `401`). The `web/src/api.js` module exports methods like `listUploads()`, `createUpload(payload)`, `getUploadManifest(id)`, etc., mirroring the endpoints defined in `openapi.yaml`.
+The frontend (`web/src/api.js`) provides a type-safe, intercept-based abstraction layer over the API:
 
-The frontend also uses the `/api/default-software` endpoint to pre-fill configuration forms and relies on `/api/uploads/{id}/manifest` to render the final build output summary.
+- **Request Interceptor**: Attaches JWT token from `localStorage`.
+- **Response Interceptor**: Handles `401` (redirect to login), `403` (show forbidden message), and structured `4xx/5xx` errors.
+- **Typed Clients**: Auto-generated client methods mirror spec endpoints:
+  - `listUploads({ limit, offset, status })`
+  - `createUpload({ filename, software })`
+  - `getUpload(id)`
+  - `updateSoftware(id, { software })`
+  - `getManifest(id)`
+  - `downloadIso(id)` (handles binary stream)
+  - `deleteUpload(id)`
+
+The frontend also uses:
+- `GET /api/default-software` to initialize `software` selection in upload forms.
+- `GET /api/uploads/{id}/manifest` to render build results, dependency trees, and checksums in the UI.
+
+This tight coupling ensures frontend and backend evolve in lockstep, with spec-driven contract testing in CI.
+
+---
 
 ## Swagger UI Integration
 
-The OpenAPI spec is exposed via Swagger UI for interactive documentation and API exploration. This is served as part of the frontend application (e.g., at `/docs`), and is integrated into the `web/` application using a static HTML file (`web/index.html`) served by Nginx (`web/nginx.conf`).
+The OpenAPI spec is integrated into the frontend application and exposed at `/docs` (served by Nginx via `web/nginx.conf`). The UI is implemented as a static SPA using `swagger-ui-dist`, bundled during the frontend build (`npm run build`).
 
-The latest specification is automatically built and deployed as part of the CI/CD workflow (`.github/workflows/main.yml`), ensuring that the documentation is always in sync with the current backend API surface.
+Key aspects:
+- **Live Preview**: Users can explore and test endpoints directly in the browser.
+- **Spec Fetching**: The UI dynamically loads `openapi.yaml` from `/api/openapi` (proxied via Nginx to `/docs/openapi.yaml` on the backend container).
+- **Versioning**: A `version` tag in the spec title links to `docs/CHANGELOG.md` and the latest release tag (e.g., `v2.1.0`).
+- **CI Sync**: On every push to `main`, `docs/openapi.yaml` is validated and deployed with the frontend artifacts to ensure consistency.
 
-Additionally, a versioned, downloadable `openapi.yaml` artifact is included in each release for downstream tooling and client SDK generation.
+No custom plugins or extensions are used beyond standard Swagger UI features.
 
-## Generating Client SDKs & Testing
-
-The `docs/openapi.yaml` file is used to generate TypeScript clients (e.g., via `openapi-typescript` or `openapi-client-axios`) and Python test fixtures (e.g., via `openapi-generator`). It is also referenced in the CI pipeline for contract testing using `pinkpdf` or `openapi-compatibility-validator`.
-
-To validate and visualize the spec locally:
-```bash
-pip install swagger-cli
-swagger-cli validate docs/openapi.yaml
-swagger-cli serve docs/openapi.yaml  # Starts a local Swagger UI at http://localhost:8080
-```
-
-Alternatively, use Docker to run the Swagger UI container:
-```bash
-docker run -p 80:8080 -e SWAGGER_JSON=/docs/openapi.yaml -v $(pwd)/docs:/docs swaggerapi/swagger-ui
-```
+---
 
 ## Maintaining the Spec
 
-As the project evolves, the following practices must be followed:
-- **Update `docs/openapi.yaml`** *before* merging backend changes that modify paths, schemas, or behavior.
-- **Test spec changes** against the local server (`python server.py`) using Swagger UI or Postman collections derived from the spec.
-- **Include sample requests/responses** in the `examples` field where behavior is nontrivial (e.g., error states, async upload flows).
-- **Document rate limits and usage quotas** in the `x-rate-limit` extension if enforced.
+To preserve accuracy and usability, the following practices are enforced:
+
+1. **Spec-First Development**: Backend route changes require an accompanying `docs/openapi.yaml` update in the same PR.
+2. **Validation Hook**: A pre-commit hook (`scripts/validate-openapi.sh`) runs `openapi-spec-validator` on changes.
+3. **CI Gate**: The CI pipeline (`main.yml`) runs `openapi-spec-validator docs/openapi.yaml` on pull requests.
+4. **Sample Coverage**: Non-trivial operations (e.g., `POST /api/uploads`, `PUT /api/uploads/{id}/software`) include `examples` fields with concrete JSON payloads and responses.
+5. **Rate Limiting & Quotas**: If applied, must be defined using `x-rate-limit-*` vendor extensions in relevant operations.
+6. **Error Consistency**: All `4xx/5xx` responses must conform to the `Error` schema.
+
+---
 
 ## Install Requirements
 
-No additional dependencies are required to *use* the OpenAPI spec, but to *generate* or *validate* it, the following tools are recommended:
+While the OpenAPI spec itself is human-readable and tool-agnostic, practical usage (validation, generation, local preview) requires additional tooling.
 
-### For Python-based validation/generation:
+### For Python-based Validation & Generation
+
+Install via `pip` for CLI tools and libraries:
 ```bash
-# Install OpenAPI tools using pip
-pip install openapi-core openapi-spec-validator
+# Install core validation and generation libraries
+pip install openapi-spec-validator openapi-core openapi-generator-cli
 
-# Validate spec
+# Validate spec against v3.0 spec
 openapi-spec-validator docs/openapi.yaml
+
+# Generate server stubs (Python Flask/FastAPI)
+openapi-generator-cli generate -i docs/openapi.yaml -g python-flask -o /tmp/server-stub
+
+# Validate and generate client bindings
+openapi-core validate docs/openapi.yaml
 ```
 
-### For CLI-based generation and serving (Node.js ecosystem):
+### For Node.js CLI Tools & SDK Generation
+
+Use `npm` or `yarn` for Node-based tooling:
 ```bash
-# Using npm
+# Global CLI for spec validation and serving
 npm install -g @apidevtools/swagger-cli
+
+# Validate syntax
 swagger-cli validate docs/openapi.yaml
-```
 
-### For Docker-based preview:
-Ensure Docker is installed (via `brew` on macOS, `apt` on Linux, or `winget` on Windows), then run:
-```bash
-docker pull swaggerapi/swagger-ui
-docker run -p 8080:8080 -v $(pwd)/docs:/docs swaggerapi/swagger-ui
-```
+# Serve locally (Swagger UI)
+swagger-cli serve docs/openapi.yaml
 
-### Frontend SDK Generation (TypeScript):
-```bash
-# Using openapi-typescript
+# TypeScript SDK generation (using openapi-typescript)
 npm install -D openapi-typescript
-npx openapi-typescript docs/openapi.yaml -o src/generated/client.ts
+npx openapi-typescript docs/openapi.yaml -o web/src/generated/client.ts
+
+# Type-safe Axios client (openapi-client-axios)
+npm install -D openapi-client-axios
+npx openapi-client-axios docs/openapi.yaml -o web/src/generated/axios-client.ts
 ```
 
-Adherence to these guidelines ensures the spec remains accurate, reliable, and useful for documentation, testing, and client development across the fullstack architecture.
+### For Docker-based Preview
+
+Use Docker to run Swagger UI without local dependencies:
+```bash
+# Ensure Docker daemon is running
+# Pull latest image
+docker pull swaggerapi/swagger-ui
+
+# Run container, mounting the docs directory
+docker run -p 8080:8080 \
+  -e SWAGGER_JSON=/openapi.yaml \
+  -v $(pwd)/docs:/openapi \
+  swaggerapi/swagger-ui
+```
+Then visit `http://localhost:8080` to view the interactive documentation.
+
+### Frontend SDK Generation (TypeScript)
+
+The project uses `openapi-typescript` for tight TypeScript integration:
+```bash
+# Generate client definitions for `web/src/api.js`
+npm run generate:client  # Defined in `package.json` as `npx openapi-typescript docs/openapi.yaml -o web/src/generated/client.ts`
+
+# Include generated types in `tsconfig.json`:
+# "include": ["web/src/generated/client.ts"]
+```
+Generated types are committed to the repository to avoid build-time dependency on the backend spec—updated only via CI.
+
+### System-Level Prerequisites
+
+| Tool | Installation Method | Notes |
+|------|---------------------|-------|
+| Python 3.11+ | `pyenv`, `apt`, `brew` | Required for `openapi-spec-validator` and local `server.py` testing. |
+| Node.js 18+ | `nvm`, `brew`, `apt` | Required for `openapi-typescript`, `swagger-cli`, and frontend tooling. |
+| Docker | `brew`, `apt`, `winget`, Docker Desktop | Required for containerized Swagger UI and `docker-compose` services. |
+| `openapi-generator-cli` | `npm`, Docker, or standalone JAR | Used for server/client stub generation in CI and local dev. |
+
+All tools are version-pinned in `.tool-versions` (for `asdf`) and `Dockerfile` (for `python:3.11-slim`).

@@ -155,9 +155,6 @@ Vite prefixes all injected env vars with `VITE_`. These are **statically replace
    SERVER_PORT=8000
    API_BASE_PATH=/api
    DEBUG=true
-   ```
-   For frontend, add:
-   ```env
    VITE_API_URL=http://localhost:8000/api
    ```
 

@@ -1,0 +1,66 @@
+openapi: 3.0.3
+info:
+  title: API
+  version: 0.1.0
+paths:
+  /api/default-software:
+    get:
+      summary: GET /api/default-software
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+  /api/health:
+    get:
+      summary: GET /api/health
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+  /api/uploads:
+    get:
+      summary: GET /api/uploads
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: POST /api/uploads
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+  /api/uploads/{id}:
+    delete:
+      summary: DELETE /api/uploads/{id}
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+    get:
+      summary: GET /api/uploads/{id}
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+  /api/uploads/{id}/iso:
+    get:
+      summary: GET /api/uploads/{id}/iso
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+  /api/uploads/{id}/manifest:
+    get:
+      summary: GET /api/uploads/{id}/manifest
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+  /api/uploads/{id}/software:
+    put:
+      summary: PUT /api/uploads/{id}/software
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK

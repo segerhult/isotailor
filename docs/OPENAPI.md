@@ -109,6 +109,14 @@ The frontend (`web/src/api.js`) consumes this API using Axios. Request intercept
 
 The frontend also uses the `/api/default-software` endpoint to pre-fill configuration forms and relies on `/api/uploads/{id}/manifest` to render the final build output summary.
 
+## Swagger UI Integration
+
+The OpenAPI spec is exposed via Swagger UI for interactive documentation and API exploration. This is served as part of the frontend application (e.g., at `/docs`), and is integrated into the `web/` application using a static HTML file (`web/index.html`) served by Nginx (`web/nginx.conf`).
+
+The latest specification is automatically built and deployed as part of the CI/CD workflow (`.github/workflows/main.yml`), ensuring that the documentation is always in sync with the current backend API surface.
+
+Additionally, a versioned, downloadable `openapi.yaml` artifact is included in each release for downstream tooling and client SDK generation.
+
 ## Generating Client SDKs & Testing
 
 The `docs/openapi.yaml` file is used to generate TypeScript clients (e.g., via `openapi-typescript` or `openapi-client-axios`) and Python test fixtures (e.g., via `openapi-generator`). It is also referenced in the CI pipeline for contract testing using `pinkpdf` or `openapi-compatibility-validator`.

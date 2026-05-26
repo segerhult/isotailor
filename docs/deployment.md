@@ -1,6 +1,6 @@
 # Deployment
 
-This repository is a fullstack application composed of a Python-based backend API server and a Vue.js-based frontend web application, served using NGINX within a containerized environment. The backend (`server.py`) is a lightweight, asynchronous Python HTTP service built on `aiohttp`, exposing RESTful endpoints such as `/api/software`, `/api/manifest`, and file upload routes (`/api/upload`, `/api/uploads`). The frontend is a Vue 3 Single Page Application (SPA), constructed with Vite and served statically via NGINX, which also acts as a reverse proxy to route API requests to the backend service on port `8080`.
+This repository is a fullstack application composed of a Python-based backend API server and a Vue.js-based frontend web application, served using NGINX within a containerized environment. The backend (`server.py`) is a lightweight, asynchronous Python HTTP service built on `aiohttp`, exposing RESTful endpoints such as `/api/software`, `/api/manifest`, `/api/upload`, and `/api/uploads`. The frontend is a Vue 3 Single Page Application (SPA), constructed with Vite and served statically via NGINX, which also acts as a reverse proxy to route API requests to the backend service on port `8080`.
 
 All services—frontend, backend, and optional database—are designed to be deployed using Docker and orchestrated via Docker Compose. This ensures reproducibility across environments, eliminates dependency conflicts, and abstracts platform-specific concerns. The application is not intended for native deployment in production due to the tight coupling of the build artifacts, configuration files (e.g., NGINX reverse proxy), and container networking; however, a manual deployment path is included for advanced users requiring debugging or prototyping capabilities.
 
@@ -342,5 +342,3 @@ For database migrations or data model changes:
 - [NGINX Reverse Proxy Tutorial](https://nginx.org/en/docs/http/ngx_http_proxy_module.html)
 - [AIOHTTP Production Deployment](https://docs.aiohttp.org/en/stable/deployment.html)
 - [Docker Compose Best Practices](https://docs.docker.com/compose/best-practices/)
-
-This deployment guide is versioned with the repository and reflects the current implementation (`server.py`, `web/`, `docker-compose.yml`). Always reference the latest source files for runtime specifics.

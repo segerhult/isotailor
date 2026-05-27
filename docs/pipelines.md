@@ -95,7 +95,7 @@ The workflow contains a single job named `orchestra`, provisioned on `ubuntu-lat
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 ```
 
-This rewrites the `origin` remote to use **token-authenticated HTTPS**, the standard pattern for secure CI pushes to GitHub. Without this, subsequent `orchestra-ai-devops` commands (which may call `git push`) would fail with `403` or `Authentication failed`.
+This rewrites the `origin` remote to use **token-authenticated HTTPS**, the standard pattern for secure CI pushes to GitHub. Without this, subsequent `orchestra-ai-devops` commands (which attempt to push generated documentation) would fail with `403` or `Authentication failed`.
 
 ---
 
@@ -124,7 +124,7 @@ The `orchestra-ai-devops` CLI is a Node.js application. Node 20 is selected to m
     OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     OPENAI_BASE_URL: https://openrouter.ai/api/v1
     AI_BASE_URL: https://openrouter.ai/api/v1
-    AI_MODEL: qwen/qwen3-coder-next
+    AI_MODEL: google/gemini-2.5-flash-lite # Updated to reflect current usage
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     ORCHESTRA_ROLE_ROUTING: prefer
     ORCHESTRA_DOCS_PR: '1'
@@ -135,9 +135,9 @@ The `orchestra-ai-devops` CLI is a Node.js application. Node 20 is selected to m
 
 | Variable | Value | Role |
 |---------|-------|------|
-| `OPENAI_API_KEY` | GitHub Secret `OPENROUTER_API_KEY` | Authenticates to [OpenRouter](https://openrouter.ai), a proxy for open-weight models (e.g., Qwen, Mistral). *Not* OpenAI’s official API. |
+| `OPENAI_API_KEY` | GitHub Secret `OPENROUTER_API_KEY` | Authenticates to [OpenRouter](https://openrouter.ai), a proxy for open-weight models (e.g., Gemini, Qwen). *Not* OpenAI’s official API. |
 | `OPENAI_BASE_URL` / `AI_BASE_URL` | `https://openrouter.ai/api/v1` | Routes LLM calls to OpenRouter instead of `api.openai.com`. Required for model selection. |
-| `AI_MODEL` | `qwen/qwen3-coder-next` | Uses Alibaba’s Qwen 3 Coder, fine-tuned for code understanding, generation, and documentation. Offers strong performance at lower cost than GPT-4. |
+| `AI_MODEL` | `google/gemini-2.5-flash-lite` | Uses Google's Gemini 2.5 Flash Lite model, optimized for speed and cost-efficiency in code analysis and documentation generation. |
 | `GITHUB_TOKEN` | GitHub auto-provisioned token | Used by `orchestra-ai-devops` to read PR metadata, post comments, and push files. |
 | `ORCHESTRA_ROLE_ROUTING` | `prefer` | Enables task decomposition: assigns sub-tasks to specialized agents (e.g., “Docker expert”, “Python architect”) for better accuracy. |
 | `ORCHESTRA_DOCS_PR` | `'1'` | Activates PR-specific mode: outputs are written to `.orchestra/` *and* posted as PR comments (not merged into `main`). |
@@ -146,234 +146,251 @@ The `orchestra-ai-devops` CLI is a Node.js application. Node 20 is selected to m
 
 This scans the repository root (`.`) and performs **four levels of analysis**:
 
-1. **File & Dependency Graph Inference**  
-   - Parses `web/package.json`, `web/package-lock.json`, `server.py`, `web/src/`, `Dockerfile`, `docker-compose.yml`
-   - Maps import chains: `main.js → App.vue → api.js → /api/health`
-   - Identifies hidden dependencies (e.g., `nginx.conf` references `/usr/share/nginx/html`, inferred from `web/Dockerfile`)
+1.  **File & Dependency Graph Inference**:
+    - Parses `web/package.json`, `web/package-lock.json`, `server.py`, `web/src/`, `Dockerfile`, `docker-compose.yml`, and `docs/openapi.yaml`.
+    - Maps import chains (e.g., `main.js → App.vue → api.js → /api/health`).
+    - Identifies external dependencies and their roles within the application architecture.
+    - Recognizes the OpenAPI specification (`docs/openapi.yaml`) for detailed API analysis.
 
-2. **Architecture Diagram Generation**  
-   - Produces ASCII/PlantUML diagrams for:
-     - System topology (client → nginx → API → DB)
-     - CI/CD pipeline flow (PR → doc-gen → docs commit)
-     - Build layers (Dockerfile multi-stage → multi-image composition)
-   - Example snippet from output:
-     ```plaintext
-     [Browser] → [nginx:80] → [FastAPI (Python 3.11)] → [PostgreSQL]
-     ```
+2.  **Architecture Diagram Generation**:
+    - Produces ASCII, PlantUML, or other supported formats for:
+      - System topology (e.g., Browser → Nginx → FastAPI → Database).
+      - CI/CD pipeline flow (e.g., Pull Request → Documentation Generation → Documentation Commit).
+      - Build layers (e.g., Dockerfile multi-stage build process).
+    - Example snippet from output:
+        ```plaintext
+        [Browser] → [nginx:80] → [FastAPI (Python 3.11)] → [Database]
+        ```
 
-3. **API Contract Extraction (Heuristic)**  
-   - Scans `server.py` for FastAPI decorators (`@app.get`, `@app.post`, etc.)
-   - Infers endpoints, parameters, response schemas, and auth (if present)
-   - Outputs `api-summary.json` with structure:
-     ```json
-     {
-       "endpoints": [
-         {
-           "path": "/api/health",
-           "method": "GET",
-           "summary": "Health check endpoint",
-           "responses": { "200": "OK" }
-         },
-         ...
-       ]
-     }
-     ```
-   - *Note*: This is *not* OpenAPI spec generation — it’s a lightweight, dependency-free summary suitable for PR reviews.
+3.  **API Contract Extraction and Validation**:
+    - Scans `server.py` for FastAPI route definitions (e.g., `@app.get`, `@app.post`).
+    - Analyzes `docs/openapi.yaml` for a precise definition of API endpoints, parameters, request/response schemas, and authentication methods.
+    - Merges in-code route definitions with the OpenAPI spec to ensure consistency and identify potential discrepancies.
+    - Outputs `api-summary.json` (or similar) with structure detailing:
+        ```json
+        {
+          "endpoints": [
+            {
+              "path": "/api/health",
+              "method": "GET",
+              "summary": "Health check endpoint",
+              "description": "Checks the health status of the API.",
+              "responses": { "200": { "description": "OK" } }
+            },
+            // ... more endpoints
+          ]
+        }
+        ```
+    - *Note*: This goes beyond simple inference by actively validating against the OpenAPI spec.
 
-4. **Local Equivalence Mapping**  
-   - Maps CI steps to developer-friendly commands:
-     - `docker-compose build` ↔ `docker build -f web/Dockerfile .`
-     - `npm ci` ↔ local frontend install
-     - `uvicorn server:app` ↔ local backend dev server
-   - Generates a reproducible `install-requirements.md` (see below)
+4.  **Local Equivalence Mapping**:
+    - Maps CI/CD steps to developer-friendly local commands:
+      - `docker-compose build` equivalent to backend and frontend build processes.
+      - `npm ci` for frontend dependency installation.
+      - `uvicorn server:app` for running the backend development server.
+    - Generates a reproducible `install-requirements.md` file detailing setup steps for local development.
 
 ---
 
 ## Generated Artifacts
 
-All outputs are committed to `.orchestra/` *on the PR branch* and posted as PR comments. Key files:
+All outputs are committed to `.orchestra/` *on the PR branch* and posted as PR comments. Key files include:
 
 | File | Content | Use Case |
 |------|---------|----------|
-| `architecture.md` | ASCII diagrams, tech stack table, container breakdown | PR reviewers understand system layout at a glance |
-| `api-summary.json` | JSON list of endpoints (no spec version) | Validate API coverage (e.g., new routes added?) |
-| `ci-cd-breakdown.md` | CI steps ↔ local commands table | Developers replicate CI locally |
-| `install-requirements.md` | Tooling + install steps (see below) | Onboarding, debugging environment drift |
-| `docker-build-plan.md` | Build order, layer caching notes, `.dockerignore` impact | Optimize Docker builds |
-| `directory-structure.md` | Markdown file tree with descriptions | Rapid repository orientation |
+| `architecture.md` | ASCII diagrams, tech stack table, container breakdown | PR reviewers can quickly grasp the system layout. |
+| `api-summary.json` | JSON list of endpoints validated against `openapi.yaml` | Verify API coverage and consistency. |
+| `ci-cd-breakdown.md` | CI steps mapped to local commands | Developers can easily replicate CI processes locally. |
+| `install-requirements.md` | Step-by-step guide for local setup | Streamlines onboarding and environment setup. |
+| `docker-build-plan.md` | Build order, layer caching strategies, `.dockerignore` impact | Understand and optimize Docker build processes. |
+| `directory-structure.md` | Markdown file tree with component descriptions | Provides a quick overview of the repository's organization. |
 
-> ✅ **Impact**: A PR reviewer can understand the *entire system context* in <5 minutes — without reading source code.
+> ✅ **Impact**: A PR reviewer can understand the *entire system context* in minutes — significantly reducing the need to read source code for initial comprehension.
 
 ---
 
 ## Install Requirements (Detailed, Production-Grade)
 
+This section details the environment and tooling necessary for both local development and matching the CI environment.
+
 ### Backend: Python 3.11 (for `server.py`)
 
-The backend runs on `python:3.11-slim`, so local environments should match to avoid drift.
+The backend is containerized using `python:3.11-slim` as its base image. Local development environments should mirror this to prevent runtime discrepancies.
 
-| Tool | Version | Installation Method | Notes |
-|------|---------|---------------------|-------|
-| **Python** | 3.11.x (e.g., 3.11.9) | `pyenv` (recommended) / system package manager | Must match `Dockerfile` base image. Use `pyenv install 3.11.9 && pyenv global 3.11.9`. |
-| **`pip`** | ≥22.0 | Included with Python ≥3.8 | Upgrade with `python -m pip install --upgrade pip`. |
-| **Key Packages** (inferred from `server.py` and slim image) | `fastapi`, `uvicorn`, `pydantic`, `python-multipart` | Install via `pip install -r requirements.txt` (if present) or `pip install fastapi uvicorn pydantic python-multipart` | If `Dockerfile` contains `RUN pip install ...`, those are the exact packages needed. Verify with `cat Dockerfile | grep pip`. |
-| **Virtual Environment** | — | `python -m venv .venv && source .venv/bin/activate` | Required for clean local builds. Avoid global installs. |
+| Tool | Recommended Version | Installation Method | Notes |
+|------|---------------------|---------------------|-------|
+| **Python Interpreter** | 3.11.x (e.g., 3.11.9) | `pyenv` (strongly recommended) or system package manager | Crucial for matching the `Dockerfile`'s base image. Use `pyenv install 3.11.9 && pyenv global 3.11.9` for management. |
+| **`pip`** | ≥22.0 | Bundled with Python ≥3.8 | Ensure it's up-to-date: `python -m pip install --upgrade pip`. |
+| **Backend Dependencies** | (`fastapi`, `uvicorn`, `pydantic`, `python-multipart`, potentially others from `server.py` imports) | `pip install -r requirements.txt` (if `requirements.txt` exists) or direct `pip install <package-name>` | If the `Dockerfile` explicitly lists dependencies with `RUN pip install ...`, replicate those exact packages. Verify using `grep -E 'RUN.*pip install' Dockerfile`. |
+| **Virtual Environment** | N/A | `python -m venv .venv && source .venv/bin/activate` | Essential for isolating project dependencies and maintaining clean builds. Avoid global Python package installations. |
 
-#### Backend Setup Checklist
+#### Backend Local Setup Checklist
 
 ```bash
-# 1. Ensure Python 3.11
-python --version  # Must be 3.11.x
+# 1. Verify Python version
+python --version
+# Expected: Python 3.11.x
 
-# 2. Create venv
+# 2. Create and activate virtual environment
 python -m venv .venv
 source .venv/bin/activate
 
-# 3. Install dependencies
+# 3. Upgrade pip and install base dependencies
 pip install --upgrade pip setuptools wheel
-pip install fastapi uvicorn pydantic python-multipart  # OR: -r requirements.txt
+# If requirements.txt exists:
+# pip install -r requirements.txt
+# Otherwise, install inferred dependencies:
+pip install fastapi uvicorn pydantic python-multipart
 
-# 4. Run backend (matches Docker ENTRYPOINT)
-uvicorn server:app --reload  # --reload for dev
-# OR: uvicorn server:app --host 0.0.0.0 --port 8000
+# 4. Run the backend development server
+# This command should align with the Dockerfile's CMD or ENTRYPOINT if specified.
+uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
-> 🔍 **Heuristic Clarification**: The `Dockerfile` uses `python:3.11-slim` with no `COPY` of `requirements.txt`. This strongly suggests dependencies are either:
-> - Declared inline in `Dockerfile` (e.g., `RUN pip install fastapi uvicorn`)
-> - Or managed via `pyproject.toml` (e.g., `poetry`/`hatch`), though no `pyproject.toml` was detected.
-> 
-> To resolve ambiguity, run:
-> ```bash
-> grep -E "pip install" Dockerfile
-> ```
-> If empty, assume `pyproject.toml`/`setup.py` usage — but in its absence, use the inferred packages above.
+> 🔍 **Ambiguity Resolution**: The `Dockerfile` uses `python:3.11-slim` without an explicit `requirements.txt` copy. This implies dependencies might be installed inline (`RUN pip install ...`) or managed via a build tool like Poetry or Hatch (though no `pyproject.toml` was detected). Examine the `Dockerfile` for `RUN pip install` commands to confirm the exact package list. If none are found, rely on the inferred list or check for `pyproject.toml`.
 
 ---
 
 ### Frontend: Vue 3 + Vite (for `web/`)
 
-The frontend is a modern Vite + Vue 3 SPA. Node 20 is used in CI for compatibility.
+The frontend is a Single Page Application (SPA) built with Vite and Vue 3. The CI environment uses Node.js 20 to ensure compatibility with the build tools.
 
-| Tool | Version | Installation Method | Notes |
-|------|---------|---------------------|-------|
-| **Node.js** | 20.x (LTS) | `nvm` (recommended) | `nvm install 20 && nvm use 20`. Ensures parity with `actions/setup-node`. |
-| **`npm`** | v10+ | Bundled with Node 20 | Use `npm -v` to verify. |
-| **Build Tool** | Vite ≥5.x | `npm ci` (via `web/package.json`) | Lockfile (`package-lock.json`) ensures reproducibility. |
-| **UI Framework** | Vue 3 | `npm ci` (via `web/package.json`) | No build step required in CI — `vite build` is only for Docker. |
-| **HTTP Client** | `axios` or `fetch` | Inferred from `web/src/api.js` | Not a dependency — standard `fetch` is used unless explicitly imported. |
+| Tool | Recommended Version | Installation Method | Notes |
+|------|---------------------|---------------------|-------|
+| **Node.js** | 20.x (LTS) | `nvm` (recommended) | Install via `nvm install 20 && nvm use 20`. This ensures parity with the       `actions/setup-node` version used in CI. |
+| **`npm`** | v10+ | Bundled with Node 20 | Verify with `npm -v`. |
+| **Frontend Dependencies** | Managed via `web/package.json` and `web/package-lock.json` | `npm ci` (inside the `web/` directory) | *Crucially*, use `npm ci` to install exact versions from the lock file, ensuring reproducibility and matching the CI build process. |
+| **Build Tool** | Vite | Managed by `npm ci` | Vite is the primary build tool. |
+| **UI Framework** | Vue 3 | Managed by `npm ci` | No separate installation required beyond `npm ci`. |
 
-#### Frontend Setup Checklist
+#### Frontend Local Setup Checklist
 
 ```bash
+# Navigate to the frontend directory
 cd web
 
-# 1. Install dependencies (reproducible)
+# 1. Install dependencies using the lock file for reproducibility
 npm ci
 
-# 2. Run dev server (mirrors local workflow)
-npm run dev  # Starts on http://localhost:5173 by default
+# 2. Start the development server (matches CI build/serve steps)
+npm run dev
+# Typically runs on http://localhost:5173 or similar.
 
-# 3. Build for production (matches `web/Dockerfile` step)
-npm run build  # Outputs to `dist/`
+# 3. Build the production-ready frontend assets (mirrors Docker build step)
+npm run build
+# This command outputs static assets to the 'dist/' directory.
 ```
 
-> ⚠️ **Critical Distinction**: `npm ci` is *mandatory* for CI parity. `npm install` may update `package-lock.json`, causing differences between:
-> - Local `npm install` → Docker build (which uses `npm ci`)
-> - CI → Docker build (which uses `npm ci`)
+> ⚠️ **Critical Distinction**: Always use `npm ci` for dependency installation in both local development and CI. Using `npm install` can inadvertently update `package-lock.json`, leading to discrepancies between your local setup and the Docker image built in CI.
 
 ---
 
 ### Container Runtime
 
-| Tool | Version | Installation Method | Notes |
-|------|---------|---------------------|-------|
-| **Docker** | ≥24.0 | OS package (`apt install docker.io`), Docker Desktop, or `docker compose` plugin | Required to run `docker-compose.yml`. |
-| **Docker Compose** | v2+ (`docker compose`) | Bundled with Docker Desktop / `docker compose` plugin | The project uses `docker-compose.yml` (v2.x format). |
-| **Local Equivalents** | `docker-compose build && docker-compose up` | `docker compose up --build` (v2 syntax) | Use `--remove-orphans` if services persist across runs. |
+The application relies on Docker for containerization and Docker Compose for orchestrating multiple services (backend, frontend, potentially databases).
 
-#### Full Local Stack Test
+| Tool | Recommended Version | Installation Method | Notes |
+|------|---------------------|---------------------|-------|
+| **Docker** | ≥24.0 | Official Docker installation guides for your OS, Docker Desktop | Required to build and run Docker images and containers. |
+| **Docker Compose** | v2+ (as `docker compose`) | Bundled with Docker Desktop, or installed as a plugin | The project uses the `docker-compose.yml` file, which is compatible with Docker Compose v2 syntax. |
+
+#### Full Local Stack Test (`docker-compose.yml`)
+
+To run the entire application stack locally, matching the containerized deployment:
 
 ```bash
-# Build & run backend, frontend (nginx), and any sidecars
-docker-compose up --build
+# Ensure Docker and Docker Compose are running.
+# Navigate to the root directory containing docker-compose.yml.
+
+# Build all services (backend, frontend nginx) and start them in detached mode.
+docker compose up --build -d
+
+# To view logs:
+docker compose logs -f
+
+# To stop and remove containers, networks, and volumes:
+docker compose down
 ```
 
-This starts:
-- Backend on `localhost:8000`
-- Frontend (nginx) on `localhost:80`
-- (Optional) Database, if `docker-compose.yml` includes it.
+This command builds the necessary Docker images (if not already present) and starts the backend and frontend (served by nginx) services, making them accessible on `localhost:8000` and `localhost:80` respectively (ports configurable in `docker-compose.yml`).
 
 ---
 
 ## Secrets & Security
 
-### Secrets in Use
+### Secrets Management
 
-| Secret | Purpose | Best Practices |
-|--------|---------|----------------|
-| `OPENROUTER_API_KEY` | Authenticates to OpenRouter for AI doc-gen | Rotate every 90 days. Scope to *read-only* if OpenRouter supports it. Never log. |
-| `GITHUB_TOKEN` | CI authentication (checkout, push, comments) | Auto-provisioned. Never use `PAT` — it has broader permissions. |
-| `.env` files (e.g., `server.env`) | — | *None needed*. No `.env` is committed (implied by `.gitignore` presence). |
+The CI pipeline utilizes GitHub Secrets to securely manage sensitive information.
 
-> 🔒 **Scanning Recommendation**: Run `gitleaks` or `truffleHog` locally before committing:
+| Secret Name | Usage in CI (`.github/workflows/main.yml`) | Purpose | Security Considerations |
+|-------------|--------------------------------------------|---------|-------------------------|
+| `OPENROUTER_API_KEY` | `env.OPENAI_API_KEY`, `env.OPENAI_BASE_URL` | Authenticates the documentation generation tool to the OpenRouter API for LLM access. | **Do not commit this key directly.** Rotate regularly. Scope access if possible via OpenRouter's dashboard. Never log the secret's value. |
+| `GITHUB_TOKEN` | `secrets.GITHUB_TOKEN` (used by `actions/checkout`, `git remote set-url`, `orchestra-ai-devops`) | Provides CI environment authentication for accessing repository contents, pushing changes (generated docs), and interacting with the GitHub API. | This is a time-limited, automatically generated token scoped to the repository. Avoid using personal access tokens (PATs) with broader scopes. |
+
+### `.gitignore` Recommendations
+
+A robust `.gitignore` file is crucial for preventing accidental commits of sensitive data and unnecessary build artifacts. Based on the project structure, the following patterns should be included:
+
+-   **Environment Variables**: `*.env`, `*.env.*`, `!.env.example` (if an example file is used)
+-   **Python Dependencies**: `.venv/`, `venv/`, `env/`, `*.pyc`, `__pycache__/`
+-   **Node.js Dependencies**: `node_modules/`, `*.log`
+-   **Build Artifacts**: `dist/`, `build/`, `public/build/`
+-   **IDE / Editor Config**: `.idea/`, `.vscode/`, `*.swp`
+-   **OS Generated Files**: `.DS_Store`, `Thumbs.db`
+-   **CI/CD Generated Artifacts**: `.orchestra/` (consider committing initially, then adding to `.gitignore` or using `git update-index --skip-worktree` to manage updates)
+
+> 🔒 **Scanning Recommendation**: Before committing changes, consider using tools like `gitleaks` or `truffleHog` to scan for accidentally included secrets:
 > ```bash
 > gitleaks detect --source . --verbose
 > ```
-
-### `.gitignore` Coverage (Inferred)
-
-The presence of `server.py`, `web/package-lock.json`, and `Dockerfile` implies a `.gitignore` excluding:
-- `*.env`, `*.local`
-- `.venv/`, `node_modules/`
-- `dist/`, `build/`
-- IDE artifacts (`.idea/`, `.vscode/`)
-- `.orchestra/` *after* initial commit (since CI generates it, not humans)
-
-> ✅ **Best Practice**: Commit `.orchestra/` *initially* (as generated by CI), but exclude it from future CI runs to avoid merge conflicts (or use `git update-index --skip-worktree`).
 
 ---
 
 ## Local ↔ CI Parity Checklist
 
-| Action | Local Command | CI Equivalent (in `.github/workflows/main.yml`) |
-|--------|---------------|------------------------------------------------|
-| Analyze project structure | `npx orchestra-ai-devops doc-gen . structure` | `npx orchestra-ai-devops doc-gen . structure` (same command) |
-| Lint backend | `ruff check server.py` (if `ruff` installed) | To-be-added `lint.yml` |
-| Lint frontend | `cd web && npm run lint` (if `eslint` installed) | To-be-added `lint.yml` |
-| Unit test backend | `pytest` (if tests present) | To-be-added `test.yml` |
-| Unit test frontend | `cd web && npm run test:unit` (if `vitest` used) | To-be-added `test.yml` |
-| Build Docker images | `docker-compose build` | Not yet automated (future expansion) |
-| Run full stack | `docker-compose up` | Not yet automated |
-| Generate OpenAPI spec | `uvicorn server:app --port 8000 & curl http://localhost:8000/openapi.json > openapi.json` | Optional: extend `doc-gen` to include |
+This checklist helps ensure that the development environment closely matches the CI execution environment, minimizing "works on my machine" issues.
 
-> ✅ **Validation Tip**: After running `npx orchestra-ai-devops` locally, compare outputs to CI’s `.orchestra/` — discrepancies indicate local environment drift.
+| Action | Local Command(s) | CI Equivalent (in `.github/workflows/main.yml`) | Potential Discrepancies |
+|--------|--------------------|------------------------------------------------|--------------------------|
+| **Project Analysis & Documentation Generation** | `npx orchestra-ai-devops doc-gen . structure` | `npx orchestra-ai-devops doc-gen . structure` | LLM model differences, OpenAPI spec version mismatches, subtle code parsing variations. |
+| **Backend Dependency Installation** | `source .venv/bin/activate && pip install -r requirements.txt` (or `pip install ...`) | `pip install ...` (as per Dockerfile) | Missing packages, version conflicts if `requirements.txt` or Dockerfile is outdated. |
+| **Frontend Dependency Installation** | `cd web && npm ci` | `cd web && npm ci` (within the Docker build context) | Node.js version differences, corrupt `node_modules` / `package-lock.json` locally. |
+| **Backend Runtime** | `uvicorn server:app --reload --host 0.0.0.0 --port 8000` | `CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000"]` (in `Dockerfile`) | Port conflicts, environment variable differences, underlying Python library versions. |
+| **Frontend Serving** | `cd web && npm run dev` | `nginx` server within Docker container (serving `web/dist/`) | Build output differences (`npm run build`), nginx configuration variations. |
+| **Full Stack Execution** | `docker compose up --build` | N/A (CI focuses on artifact generation) | Differences in container networking, exposed ports, or service dependencies defined in `docker-compose.yml`. |
+
+> ✅ **Validation Tip**: After running the `orchestra-ai-devops doc-gen` command locally, compare the generated `.orchestra/` files against those produced by the CI pipeline on a PR. Any significant differences highlight areas where local and CI environments may have diverged.
 
 ---
 
 ## Future Expansions
 
-The current pipeline is intentionally lean. As the project matures, consider these add-ons:
+The current CI pipeline is intentionally streamlined to focus on automated documentation. As the project evolves, consider augmenting the CI/CD strategy with the following workflows:
 
-| Feature | New Workflow | Trigger | Why |
-|---------|--------------|---------|-----|
-| **Unit Tests** | `.github/workflows/test.yml` | `pull_request` | `pytest` for backend, `vitest` for frontend. Fail PRs on test errors. |
-| **Linting & Formatting** | `.github/workflows/lint.yml` | `pull_request` | `ruff` (Python), `eslint` (Vue), `prettier` — enforce style consistency. |
-| **Docker Image Build & Push** | `.github/workflows/release.yml` | `release` (tags `v*`) | Build `backend`, `frontend`, `app` images; push to `ghcr.io`. |
-| **Kubernetes Helm Lint** | `.github/workflows/helm.yml` | `pull_request` (if `charts/` added) | `helm lint`, `helm template` |
-| **Security Scans** | `.github/workflows/security.yml` | `pull_request` + `push to main` | `trivy fs .`, `snyk code test`, `pip-audit`. |
+| Feature | Proposed Workflow File | Trigger Event(s) | Rationale |
+|---------|------------------------|-------------------|-----------|
+| **Backend Unit & Integration Tests** | `.github/workflows/backend-tests.yml` | `pull_request`, `push` to `main` | Execute tests using `pytest` to validate backend logic and ensure code quality. Fail PRs that introduce regressions. |
+| **Frontend Unit & E2E Tests** | `.github/workflows/frontend-tests.yml` | `pull_request`, `push` to `main` | Run tests via `vitest` (or similar) for frontend components and potentially Playwright/Cypress for end-to-end scenarios. |
+| **Linting & Code Formatting** | `.github/workflows/linting.yml` | `pull_request` | Enforce code style consistency using tools like `ruff` for Python and `eslint`/`prettier` for JavaScript/Vue. Prevents style debates during reviews. |
+| **Docker Image Building & Pushing** | `.github/workflows/docker-publish.yml` | `release` (on tags `v*`) | Automate the building of optimized Docker images for the backend and frontend, and push them to a container registry (e.g., Docker Hub, GHCR). |
+| **Security Scanning** | `.github/workflows/security.yml` | `pull_request`, `push` to `main` | Integrate static analysis security testing (SAST) and dependency vulnerability scanning (e.g., `trivy`, `snyk`, `pip-audit`). |
+| **Terraform/Infrastructure Deployment** | `.github/workflows/deploy.yml` | `push` to `main`, triggered by `release` workflow | If infrastructure is managed via Terraform, orchestrate `terraform apply` after successful deployments. |
 
-> 📝 **Migration Path**: Start with `test.yml` and `lint.yml` — they add immediate value with minimal complexity.
+> 📝 **Recommended Next Steps**: Implementing automated testing (`backend-tests.yml`, `frontend-tests.yml`) and linting (`linting.yml`) are high-priority additions that significantly improve code reliability and maintainability with moderate effort.
 
 ---
 
 ## Conclusion
 
-This CI/CD pipeline embodies a **modern, developer-centric philosophy**: CI isn’t just a gate — it’s a *documentation co-pilot*. By combining automated structural analysis with LLM-generated narratives, it eliminates the "documentation tax" that plagues many projects.
+This repository's CI/CD pipeline represents a robust, modern approach centered on **"documentation as code"** and **developer productivity**. By leveraging Orchestra AI DevOps, the pipeline acts as an intelligent assistant, automatically generating and updating critical architectural and operational documentation with every code change proposed via pull request.
 
-The pipeline is:
-- ✅ **Minimal** (1 workflow, 4 steps)
-- ✅ **Safe** (no secrets in code, strict conditions)
-- ✅ **Self-updating** (doc-gen runs on every PR)
-- ✅ **Extensible** (foundation for testing/linting/releases)
+Key strengths of this pipeline include:
 
-As long as the project remains containerized and full-stack, this pattern will scale — turning every PR into an opportunity to sharpen project context and onboarding clarity.
+-   **Automated Documentation**: Eliminates manual documentation effort and ensures accuracy.
+-   **Enhanced Review Process**: Provides reviewers with immediate, context-rich information.
+-   **Streamlined Onboarding**: Makes it easier for new developers to understand the project structure and setup.
+-   **Reduced Context Switching**: Developers can grasp system details without leaving their PR review.
+-   **Minimalist Design**: Focused core workflow with clear paths for future expansion.
+-   **Security-Conscious**: Utilizes GitHub Secrets and adheres to best practices for sensitive data management.
+
+This pipeline serves as a foundational element for maintaining a healthy, well-documented, and efficiently managed full-stack application. Its extensible nature allows for the seamless integration of testing, security scanning, and deployment automation as the project matures.

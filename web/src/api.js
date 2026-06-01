@@ -32,8 +32,25 @@ export async function getDefaultSoftware() {
   return fetchJson("/api/default-software");
 }
 
+export async function listRoutes() {
+  return fetchJson("/api/routes");
+}
+
 export async function listUploads() {
   return fetchJson("/api/uploads");
+}
+
+export async function searchUploads({ q, software, limit }) {
+  const params = new URLSearchParams();
+  if (q) params.set("q", q);
+  if (limit) params.set("limit", String(limit));
+  if (software && software.length) {
+    for (const s of software) {
+      params.append("software", s);
+    }
+  }
+  const qs = params.toString();
+  return fetchJson(`/api/uploads/search${qs ? `?${qs}` : ""}`);
 }
 
 export async function getUpload(uploadId) {

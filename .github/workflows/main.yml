@@ -10,6 +10,60 @@ permissions:
   issues: write
 
 jobs:
+  pr_reviewer:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'github-actions[bot]' &&
+      !startsWith(github.head_ref, 'orchestra/')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Orchestra PR reviewer
+        run: npx orchestra-ai-devops pr-reviewer .
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          AI_BASE_URL: https://openrouter.ai/api/v1
+          AI_MODEL: google/gemini-2.5-flash-lite
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORCHESTRA_ROLE_ROUTING: prefer
+          ORCHESTRA_DOCS_PR: '1'
+
+  vuln_scan:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'github-actions[bot]' &&
+      !startsWith(github.head_ref, 'orchestra/')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Orchestra vuln scan
+        run: npx orchestra-ai-devops vuln .
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          OPENAI_BASE_URL: https://openrouter.ai/api/v1
+          AI_BASE_URL: https://openrouter.ai/api/v1
+          AI_MODEL: google/gemini-2.5-flash-lite
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ORCHESTRA_ROLE_ROUTING: prefer
+          ORCHESTRA_DOCS_PR: '1'
+
   orchestra:
     runs-on: ubuntu-latest
     environment: Orchestra

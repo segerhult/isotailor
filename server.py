@@ -122,6 +122,40 @@ def sha256_file(file_path: Path) -> str:
     return h.hexdigest()
 
 
+def split_csv_params(values: list[str]) -> list[str]:
+    parts: list[str] = []
+    for v in values:
+        for piece in v.split(","):
+            piece = piece.strip()
+            if piece:
+                parts.append(piece)
+    return parts
+
+
+def upload_matches(meta: dict, q: str, software_filters: list[str]) -> bool:
+    if software_filters:
+        sw = meta.get("software", [])
+        if not isinstance(sw, list):
+            sw = []
+        sw_set = {str(s).lower() for s in sw}
+        for required in software_filters:
+            if required.lower() not in sw_set:
+                return False
+
+    if not q:
+        return True
+
+    q_lower = q.lower()
+    if q_lower in str(meta.get("id", "")).lower():
+        return True
+    if q_lower in str(meta.get("original_filename", "")).lower():
+        return True
+    sw = meta.get("software", [])
+    if isinstance(sw, list) and any(q_lower in str(s).lower() for s in sw):
+        return True
+    return False
+
+
 def page(title: str, body: str) -> bytes:
     doc = f"""<!doctype html>
 <html lang="en">
@@ -338,6 +372,60 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
             self.send_json(
                 HTTPStatus.OK,
                 {"uploads_count": len(uploads), "total_iso_bytes": total_bytes, "time": now_iso()},
+            )
+            return
+
+        if path == "/api/routes":
+            self.send_json(
+                HTTPStatus.OK,
+                {
+                    "routes": [
+                        {"method": "GET", "path": "/api/health"},
+                        {"method": "GET", "path": "/api/default-software"},
+                        {"method": "GET", "path": "/api/stats"},
+                        {"method": "GET", "path": "/api/routes"},
+                        {"method": "GET", "path": "/api/uploads"},
+                        {"method": "GET", "path": "/api/uploads/search?q=...&software=..."},
+                        {"method": "GET", "path": "/api/uploads/{id}"},
+                        {"method": "GET", "path": "/api/uploads/{id}/iso"},
+                        {"method": "GET", "path": "/api/uploads/{id}/manifest"},
+                        {"method": "GET", "path": "/api/uploads/{id}/install-script"},
+                        {"method": "GET", "path": "/api/uploads/{id}/info?sha256=1"},
+                        {"method": "POST", "path": "/api/uploads"},
+                        {"method": "PUT", "path": "/api/uploads/{id}/software"},
+                        {"method": "DELETE", "path": "/api/uploads/{id}"},
+                    ]
+                },
+            )
+            return
+
+        if path == "/api/uploads/search":
+            q = (query.get("q", [""])[0] or "").strip()
+            software_filters = split_csv_params(query.get("software", []))
+            limit_raw = query.get("limit", ["50"])[0]
+            try:
+                limit = int(limit_raw)
+            except ValueError:
+                limit = 50
+            limit = max(1, min(200, limit))
+
+            index = load_index()
+            uploads = index.get("uploads", {})
+            matched = []
+            for meta in uploads.values():
+                if upload_matches(meta, q=q, software_filters=software_filters):
+                    matched.append(meta)
+
+            matched.sort(key=lambda m: m.get("created_at", ""), reverse=True)
+            self.send_json(
+                HTTPStatus.OK,
+                {
+                    "q": q,
+                    "software": software_filters,
+                    "count": len(matched),
+                    "limit": limit,
+                    "uploads": matched[:limit],
+                },
             )
             return
 

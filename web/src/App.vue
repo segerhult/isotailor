@@ -57,6 +57,60 @@
       </div>
     </section>
 
+    <section class="grid" style="margin-top: 16px;">
+      <div class="card">
+        <h2>Search</h2>
+        <form @submit.prevent="runSearch">
+          <label class="label">Query</label>
+          <input class="textInput" type="text" v-model="search.q" placeholder="Search by filename, id, software…" />
+
+          <label class="label">Filter software (must include)</label>
+          <div class="checks" v-if="defaultSoftware.length">
+            <label v-for="name in defaultSoftware" :key="name" class="check">
+              <input type="checkbox" :value="name" v-model="search.software" />
+              <span>{{ name }}</span>
+            </label>
+          </div>
+          <div class="muted" v-else>Loading…</div>
+
+          <label class="label">Limit</label>
+          <select class="select" v-model.number="search.limit">
+            <option :value="10">10</option>
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+            <option :value="100">100</option>
+          </select>
+
+          <div class="actions">
+            <button class="btn primary" type="submit" :disabled="busy">Search</button>
+            <button class="btn" type="button" @click="clearSearch" :disabled="busy">Clear</button>
+          </div>
+          <div v-if="search.error" class="error">{{ search.error }}</div>
+        </form>
+
+        <div style="margin-top: 12px;">
+          <div class="muted">Results: {{ search.count }}</div>
+          <ul class="list" v-if="search.results.length">
+            <li v-for="u in search.results" :key="u.id" class="item">
+              <button class="link" @click="selectUpload(u.id)">
+                {{ u.original_filename || u.id }}
+              </button>
+              <div class="meta">id: <code>{{ u.id }}</code></div>
+            </li>
+          </ul>
+          <div v-else class="muted" style="margin-top: 8px;">No results</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>API</h2>
+        <div class="actions" style="margin-top: 0;">
+          <button class="btn" @click="loadRoutes" :disabled="busy">Load routes</button>
+        </div>
+        <pre class="pre" style="min-height: 240px;">{{ routesText }}</pre>
+      </div>
+    </section>
+
     <section v-if="selected" class="card detail">
       <header class="detailTop">
         <div>
@@ -108,7 +162,9 @@ import {
   getInstallManifest,
   getUpload,
   isoDownloadUrl,
+  listRoutes,
   listUploads,
+  searchUploads,
   updateSoftware,
   uploadIso
 } from "./api.js";
@@ -129,9 +185,18 @@ export default {
       busy: false,
       defaultSoftware: [],
       uploads: [],
+      routes: null,
       selectedId: null,
       selected: null,
       manifest: null,
+      search: {
+        q: "",
+        software: [],
+        limit: 20,
+        results: [],
+        count: 0,
+        error: ""
+      },
       create: {
         file: null,
         software: [],
@@ -155,6 +220,9 @@ export default {
     },
     manifestText() {
       return this.manifest ? JSON.stringify(this.manifest, null, 2) : "{\n  \"install\": null\n}";
+    },
+    routesText() {
+      return this.routes ? JSON.stringify(this.routes, null, 2) : "{\n  \"routes\": null\n}";
     }
   },
   async mounted() {
@@ -165,14 +233,51 @@ export default {
       this.busy = true;
       this.create.error = "";
       try {
-        const [defaults, uploads] = await Promise.all([getDefaultSoftware(), listUploads()]);
+        const [defaults, uploads, routes] = await Promise.all([getDefaultSoftware(), listUploads(), listRoutes()]);
         this.defaultSoftware = defaults.default_software || [];
         this.uploads = uploads.uploads || [];
+        this.routes = routes;
         if (this.selectedId) {
           await this.selectUpload(this.selectedId);
         }
       } catch (e) {
         this.create.error = String(e.message || e);
+      } finally {
+        this.busy = false;
+      }
+    },
+    async loadRoutes() {
+      this.busy = true;
+      this.create.error = "";
+      try {
+        this.routes = await listRoutes();
+      } catch (e) {
+        this.create.error = String(e.message || e);
+      } finally {
+        this.busy = false;
+      }
+    },
+    clearSearch() {
+      this.search.q = "";
+      this.search.software = [];
+      this.search.limit = 20;
+      this.search.results = [];
+      this.search.count = 0;
+      this.search.error = "";
+    },
+    async runSearch() {
+      this.busy = true;
+      this.search.error = "";
+      try {
+        const resp = await searchUploads({
+          q: this.search.q,
+          software: this.search.software,
+          limit: this.search.limit
+        });
+        this.search.results = resp.uploads || [];
+        this.search.count = resp.count || 0;
+      } catch (e) {
+        this.search.error = String(e.message || e);
       } finally {
         this.busy = false;
       }
@@ -351,6 +456,23 @@ h3 {
 
 .input {
   width: 100%;
+}
+
+.textInput {
+  width: 100%;
+  padding: 10px 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.select {
+  width: 100%;
+  padding: 10px 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
 }
 
 .textarea {

@@ -27,7 +27,7 @@ jobs:
           node-version: '20'
 
       - name: Run Orchestra PR reviewer
-        run: npx orchestra-ai-devops pr-reviewer .
+        run: npx orchestra-ai-devops pr-review .
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1
@@ -54,7 +54,7 @@ jobs:
           node-version: '20'
 
       - name: Run Orchestra vuln scan
-        run: npx orchestra-ai-devops vuln .
+        run: npx orchestra-ai-devops vuln-scan .
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1

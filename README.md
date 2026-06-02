@@ -14,6 +14,7 @@ isotailor is a tool that allows users to upload ISO images and select software t
 *   **Software Selection:** Choose from a predefined list of software packages or enter custom packages.
 *   **Existing Uploads:** View and manage previously uploaded ISOs.
 *   **Installation Script Generation:** Generate a shell script to install selected software.
+*   **Search Uploads:** Search through uploaded ISOs by filename, ID, or included software.
 
 ## Data Storage
 
@@ -29,19 +30,26 @@ For developers, the isotailor API is available at `/api`.
 *   `GET /api/stats`: Get statistics about uploads (count and total size of ISOs).
 *   `GET /api/uploads`: List all previously uploaded ISOs.
 *   `POST /api/uploads`: Upload a new ISO file.
+*   `GET /api/routes`: List all available API routes.
+*   `GET /api/uploads/search?q=...&software=...`: Search for uploads based on a query and software filters.
 *   `GET /api/uploads/{id}`: Get details about a specific upload, including software and installation manifest.
+*   `GET /api/uploads/{id}/iso`: Download the tailored ISO file.
+*   `GET /api/uploads/{id}/manifest`: Get the installation manifest for a specific upload.
 *   `GET /api/uploads/{id}/install-script`: Get the installation script for a specific upload.
-*   `GET /api/uploads/{id}/info`: Get detailed information about a specific upload, including ISO details (path, existence, size, and optional SHA256 hash).
+*   `GET /api/uploads/{id}/info?sha256=1`: Get detailed information about a specific upload, including ISO details (path, existence, size, and optional SHA256 hash).
+*   `PUT /api/uploads/{id}/software`: Update the software list for a specific upload.
+*   `DELETE /api/uploads/{id}`: Delete a specific upload.
 
 ## Documentation
 
-- [API Reference](docs/api.md)
-- [CI/CD Pipelines](docs/pipelines.md)
-- [Docker Configuration](docs/docker.md)
-- [Nginx Configuration](docs/nginx.md)
-- [OpenAPI](docs/OPENAPI.md)
-- [Deployment Guide](docs/deployment.md)
 - [Requirements](docs/requirements.md)
 - [Environment Variables](docs/environment.md)
+- [Local Setup](docs/local-setup.md)
 - [Architecture Overview](docs/architecture.md)
+- [API Reference](docs/api.md)
+- [OpenAPI](docs/OPENAPI.md)
+- [Docker Configuration](docs/docker.md)
+- [CI/CD Pipelines](docs/pipelines.md)
+- [Nginx Configuration](docs/nginx.md)
+- [Deployment Guide](docs/deployment.md)
 - [Security Considerations](docs/security.md)

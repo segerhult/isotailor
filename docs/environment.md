@@ -17,7 +17,7 @@ The runtime configuration is divided into **backend**, **frontend**, **database 
 
 ### Backend (Python: `server.py`)
 
-The backend runs on Python 3.11 (via `python:3.11-slim` Docker image) and uses a synchronous, non-async web server (likely Flask or FastAPI—implementation not shown, but standard patterns inferred from `server.py` and `Dockerfile`). It exposes up to 9 RESTful endpoints (`custom-api` type).
+The backend runs on Python 3.11 (via `python:3.11-slim` Docker image) and uses a synchronous, non-async web server (likely Flask or FastAPI—implementation not shown, but standard patterns inferred from `server.py` and `Dockerfile`). It exposes up to 11 RESTful endpoints (`custom-api` type).
 
 #### Required Environment Variables
 
@@ -140,32 +140,79 @@ If AI integrations are added in the future (e.g., auto-generating docs, code rev
 | `OPENAI_API_KEY` | OpenAI | For chat completions, embeddings, etc. |
 | `HUGGINGFACE_TOKEN` | Hugging Face | For model inference or datasets. |
 
---- 
+---
 
 ## Runtime Validation
 
 To validate your environment before starting services:
 
-1. **Backend**:  
-   ```bash
-   export APP_PORT=8000 APP_ENV=development APP_DEBUG=true
-   python server.py
-   # Expect: Server listening on 0.0.0.0:8000
-   ```
+1.  **Backend Local Development**:
+    ```bash
+    # Set necessary environment variables
+    export APP_PORT=8000
+    export APP_HOST=0.0.0.0
+    export APP_ENV=development
+    export APP_DEBUG=true
+    # For CORS, if needed in local development:
+    # export APP_CORS_ORIGINS="http://localhost:5173"
 
-2. **Frontend (Dev)**:  
-   ```bash
-   cd web && npm install
-   export VITE_API_BASE_URL=http://localhost:8000/api
-   npm run dev
-   # Expect: Vite dev server on localhost:5173
-   ```
+    # Install backend dependencies (assuming requirements.txt exists)
+    # python -m venv venv
+    # source venv/bin/activate
+    # pip install -r requirements.txt
 
-3. **Docker Compose (Full Stack)**:  
-   ```bash
-   cp .env.example .env  # Ensure `BACKEND_SERVICE_HOST=backend` and `NGINX_PROXY_PASS=http://backend:8000`
-   docker-compose up --build
-   # Expect: Frontend at http://localhost:80, Backend at http://localhost:80/api/*
-   ```
+    # Run the backend server
+    python server.py
 
-Always verify the `.env` file is not committed (see `.gitignore` includes `.env*`).
+    # Expected output: Message indicating the server is running, e.g., "Server running on http://0.0.0.0:8000"
+    ```
+
+2.  **Frontend Local Development**:
+    ```bash
+    # Navigate to the web directory
+    cd web
+
+    # Install frontend dependencies
+    npm install
+
+    # Set the API base URL for the frontend to communicate with the backend
+    # This should point to your local backend instance
+    export VITE_API_BASE_URL=http://localhost:8000/api
+
+    # Start the Vite development server
+    npm run dev
+
+    # Expected output: Vite dev server information, usually on http://localhost:5173
+    ```
+
+3.  **Docker Compose (Full Stack)**:
+    This method orchestrates both the backend and frontend services using Docker.
+
+    a.  **Create a `.env` file**: Copy the example if available, or create manually. Ensure the following are present and correctly set:
+        ```dotenv
+        # .env file in the repository root
+        APP_PORT=8000
+        APP_HOST=0.0.0.0
+        APP_ENV=development
+        APP_DEBUG=true
+        BACKEND_SERVICE_HOST=backend # This is the service name in docker-compose.yml
+        BACKEND_SERVICE_PORT=8000
+        NGINX_PROXY_PASS=http://backend:8000 # Points Nginx to the backend service
+        COMPOSE_PROJECT_NAME=app
+        ```
+        *For production, adjust `APP_ENV` to `production` and `APP_DEBUG` to `false`.*
+
+    b.  **Build and run the services**:
+        ```bash
+        docker-compose up --build
+        ```
+        This command builds the Docker images if they don't exist and starts the containers.
+
+    c.  **Access the application**: Open your browser to `http://localhost`. Nginx will serve the frontend and proxy API requests to the backend.
+
+    d.  **Stop the services**:
+        ```bash
+        docker-compose down
+        ```
+
+Always ensure that sensitive configuration, especially API keys and secrets, are managed via environment variables or secrets management systems and are **not committed** to version control. Check your `.gitignore` file to confirm that `.env` and other sensitive configuration files are excluded.

@@ -1,398 +1,502 @@
 # Local Development Setup
 
-This guide walks you through setting up a local development environment for the fullstack application hosted in this repository. The application consists of a **Python-based backend API** (implemented using a lightweight ASGI/WSGI framework like FastAPI or Flask, served via `server.py`) and a **Vue 3 frontend** (built with Vite and served in production via Nginx). Both components are containerized for consistent local and CI/CD environments, but for rapid development iteration, you may choose to run them natively or via Docker Compose.
+This guide details how to set up a local development environment for this fullstack application. The application comprises a **Python backend API** (served by `server.py`) and a **Vue 3 frontend** (managed by Vite). Both components are designed to be containerized, but this guide also covers native development for faster iteration.
 
-The app uses **HTTP/JSON-based communication** between frontend and backend (via the `src/api.js` client utility), and includes:
-- `/api/*` backend endpoints (9 total, inferred from heuristic scan of `server.py`)
-- Static asset serving and client-side routing handled by Nginx for the built Vue frontend
-- Environment-driven configuration for backend API endpoints and ports, as well as frontend build-time injection of backend URLs
+The communication between the frontend and backend relies on **HTTP/JSON requests**, facilitated by the `src/api.js` utility. The backend exposes API endpoints mapped under a base path (e.g., `/api/*`), while the frontend handles static asset serving and client-side routing, with Nginx configured for production builds. Application configuration, such as backend API URLs and ports, is managed through environment variables, influencing both build-time frontend settings and runtime backend behavior.
 
-This setup supports both native development (for performance and tooling integration) and containerized workflows (for reproducibility and isolation), and is designed to mirror production patterns while enabling developer productivity.
+This setup aims to balance reproducible development via Docker with the productivity benefits of native tooling.
 
 ---
 
 ## Prerequisites
 
-### System Requirements
+Ensure you have the following tools installed on your development machine. Versions are important for compatibility and to avoid unexpected issues.
 
-You will need the following tools installed on your machine:
+| Tool              | Minimum Version | Usage                                                                 |
+| :---------------- | :-------------- | :-------------------------------------------------------------------- |
+| Python            | 3.11            | Running the backend server (`server.py`) natively.                    |
+| Node.js           | 18.x            | Developing and building the Vue.js frontend (`web/`).                 |
+| npm               | 9.x             | Managing frontend dependencies and build scripts.                     |
+| Docker            | 24.x            | Containerizing and running backend and frontend services.             |
+| Docker Compose    | 2.20.x          | Orchestrating multi-container applications (`docker-compose.yml`).    |
 
-| Tool | Version | Notes |
-|------|---------|-------|
-| Python | ≥ 3.11 | Required to run the backend server (`server.py`) directly. |
-| Node.js | ≥ 18.x | Required to develop and build the Vue frontend (`web/`). |
-| npm | ≥ 9.x | Bundled with Node.js; used for dependency installation and build commands. |
-| Docker & Docker Compose | ≥ 24.x & ≥ 2.20.x | Required for containerized local development. Optional but recommended for consistency. |
+### Tool Management Recommendations
 
-> 💡 **Recommendation**: Use [pyenv](https://github.com/pyenv/pyenv) to manage Python versions and [nvm](https://github.com/nvm-sh/nvm) for Node.js to avoid version conflicts and system-wide pollution.
+*   **Python Version Management**: Use [pyenv](https://github.com/pyenv/pyenv) to install and manage multiple Python versions without conflict.
+*   **Node.js Version Management**: Use [nvm (Node Version Manager)](https://github.com/nvm-sh/nvm) to easily switch between Node.js versions.
 
-#### Installing with Language-Specific Tools
+This approach helps maintain a clean system environment and ensures project-specific version requirements are met.
 
-**Python (via `pyenv` + `pip`)**  
-1. Install `pyenv` (macOS/Linux):
-   ```bash
-   curl https://pyenv.run | bash
-   ```
-   Then add the following to `~/.bashrc` or `~/.zshrc`:
-   ```bash
-   export PATH="$HOME/.pyenv/bin:$PATH"
-   eval "$(pyenv init -)"
-   ```
-2. Install Python 3.11:
-   ```bash
-   pyenv install 3.11.9
-   pyenv global 3.11.9
-   ```
-3. Verify:
-   ```bash
-   python --version  # Should output Python 3.11.x
-   pip --version
-   ```
+### Installing Prerequisites
 
-**Node.js (via `nvm`)**  
-1. Install `nvm`:
-   ```bash
-   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
-   ```
-   Reload shell config:
-   ```bash
-   source ~/.bashrc  # or ~/.zshrc
-   ```
-2. Install and use Node 18:
-   ```bash
-   nvm install 18
-   nvm use 18
-   ```
-3. Verify:
-   ```bash
-   node --version  # Should output v18.x.x
-   npm --version   # Should output ≥9.0.0
-   ```
+Follow these steps to install and configure the necessary tools:
 
-#### Installing with System Package Managers (Alternative)
+#### Using pyenv and pip for Python
 
-- **macOS**  
-  ```bash
-  brew install python@3.11 node@18  # Requires Homebrew
-  ```
+1.  **Install pyenv**: (macOS/Linux)
+    ```bash
+    curl https://pyenv.run | bash
+    ```
+    Add the following lines to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.):
+    ```bash
+    export PATH="$HOME/.pyenv/bin:$PATH"
+    eval "$(pyenv init --path)"
+    eval "$(pyenv init -)"
+    ```
+    Then, restart your shell or run `source ~/.bashrc` (or `source ~/.zshrc`).
 
-- **Ubuntu/Debian**  
-  ```bash
-  sudo apt update && sudo apt install -y python3 python3-pip nodejs npm
-  # Ensure versions match: `python3 --version`, `node --version`, `npm --version`
-  ```
+2.  **Install Python 3.11**:
+    ```bash
+    pyenv install 3.11.9
+    pyenv global 3.11.9  # Sets 3.11.9 as the default Python version
+    ```
 
-- **Windows**  
-  Download and install from official sources:
-  - [Python 3.11 installer (amd64)](https://www.python.org/downloads/windows/)
-  - [Node.js LTS 18.x (MSI installer)](https://nodejs.org/en/download/)
+3.  **Verify Installation**:
+    ```bash
+    python --version
+    pip --version
+    ```
+    Both commands should output versions consistent with Python 3.11.x.
 
-> ⚠️ **Caution**: Avoid mixing system-wide `pip install --user` or global `npm install -g` for project dependencies. Use virtual environments and `package.json` to ensure reproducibility.
+#### Using nvm for Node.js and npm
+
+1.  **Install nvm**:
+    ```bash
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    ```
+    After installation, reload your shell configuration:
+    ```bash
+    source ~/.bashrc  # Or source ~/.zshrc
+    ```
+
+2.  **Install and Use Node.js 18.x**:
+    ```bash
+    nvm install 18
+    nvm use 18
+    ```
+
+3.  **Verify Installation**:
+    ```bash
+    node --version
+    npm --version
+    ```
+    Node.js should be v18.x.x, and npm should be v9.x.x or higher.
+
+#### Alternative: System Package Managers
+
+While pyenv and nvm are recommended, you can use system package managers for simpler setups:
+
+*   **macOS (using Homebrew)**:
+    ```bash
+    brew install python@3.11 node@18
+    # You may need to link them:
+    # brew link python@3.11 --force
+    # brew link node@18 --force
+    ```
+
+*   **Ubuntu/Debian**:
+    ```bash
+    sudo apt update
+    sudo apt install -y python3 python3-pip nodejs npm
+    # Verify versions: python3 --version, node --version, npm --version
+    ```
+
+*   **Windows**:
+    Download and install the appropriate installers from the official sources:
+    *   [Python 3.11 (64-bit)](https://www.python.org/downloads/windows/)
+    *   [Node.js LTS 18.x](https://nodejs.org/en/download/)
+
+> **Caution**: When installing system-wide, avoid using `pip install --user` or `npm install -g` for project dependencies. Always use virtual environments for Python and project-local `npm install` for Node.js to ensure consistent and reproducible builds.
 
 ---
 
-## Repository Structure Overview
+## Repository Structure
+
+A quick overview of the project's key files and directories:
 
 ```
-├── server.py               # Python backend (ASGI/WSGI app, runs on port 8000 by default)
-├── Dockerfile              # Backend container image (python:3.11-slim)
-├── docker-compose.yml      # Orchestrates frontend & backend services (services: backend, frontend)
-├── web/                    # Vue 3 frontend source
-│   ├── src/
-│   │   ├── main.js         # Entry point, mounts App.vue
-│   │   ├── App.vue         # Root component, includes router & global layout
-│   │   └── api.js          # Axios-based API client; resolves base URL via `VITE_API_URL`
-│   ├── index.html          # HTML template for Vite dev/prod builds
-│   ├── nginx.conf          # Nginx config for serving static files & SPA fallback routing
-│   ├── Dockerfile          # Frontend container (uses nginx:alpine)
-│   └── package.json        # Dependencies: vue, vite, @vue/*, axios, eslint
-├── .github/workflows/main.yml  # CI/CD pipeline for builds, tests, and image pushes
-└── docs/                   # Additional documentation (if present)
+├── server.py               # Main entry point for the Python backend application.
+├── Dockerfile              # Defines the Docker image for the backend service.
+├── docker-compose.yml      # Defines and configures multi-container services (backend, frontend).
+├── web/                    # Contains the Vue 3 frontend source code.
+│   ├── src/                # Vue component, utility, and main application files.
+│   │   ├── App.vue         # Root Vue component.
+│   │   ├── main.js         # Application entry point; mounts App.vue.
+│   │   └── api.js          # Client for making API requests to the backend.
+│   ├── index.html          # Main HTML template for the frontend.
+│   ├── nginx.conf          # Nginx configuration for serving static assets and SPA routing.
+│   ├── Dockerfile          # Defines the Docker image for the frontend service (using Nginx).
+│   └── package.json        # Frontend project dependencies and scripts.
+├── .github/workflows/main.yml  # CI/CD pipeline configuration.
+└── docs/                   # Contains additional documentation, e.g., OpenAPI specs.
+    └── openapi.yaml        # OpenAPI specification for the backend API.
 ```
 
-> 🔍 **Key Details**:  
-> - `web/Dockerfile` uses multi-stage builds: first installs dependencies and builds assets, then copies only the static output (`dist/`) into an `nginx:alpine` image.  
-> - `web/nginx.conf` implements a `try_files` directive for SPA routing (`/dashboard`, `/user/123` → `index.html`).  
-> - `server.py` defines routes like `/api/health`, `/api/users`, `/api/auth/login`, etc., returning JSON responses.
+**Key Components Analysis**:
+
+*   **`server.py`**: Implements the backend API. It's likely using a framework like FastAPI or Flask, designed to be run with an ASGI/WSGI server (like `uvicorn`). It exposes API routes and is configured by environment variables.
+*   **`web/` directory**: Houses the Vue 3 frontend, built with Vite.
+    *   `web/src/api.js`: This file is crucial. It likely uses a library like `axios` or the native `fetch` API to communicate with the backend. It resolves the backend API URL using a Vite environment variable (`VITE_API_URL`).
+    *   `web/nginx.conf`: Configured to serve the static assets produced by the Vite build (`dist/`). It also includes routing logic for Single Page Applications (SPAs), ensuring that client-side routes (like `/dashboard`) correctly return `index.html` for server-side processing.
+    *   `web/Dockerfile`: A multi-stage build is used. The initial stage installs dependencies and builds the Vue application. The final stage copies only the built static assets into a lightweight Nginx image, optimizing the final image size.
+*   **`Dockerfile` (root)**: Defines the base image and setup for the backend Python environment, likely using `python:3.11-slim`.
+*   **`docker-compose.yml`**: Orchestrates the `backend` and `frontend` services. It defines networks, port mappings, volumes, and environment variables for each service, simplifying local development.
 
 ---
 
 ## Environment Variables
 
-Environment variables drive runtime behavior for both backend and frontend. These are loaded at runtime for the backend and injected **at build time** for the frontend via Vite's `import.meta.env`.
+Environment variables are essential for configuring the application's behavior at runtime and build time.
 
 ### Backend (`server.py`) Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `SERVER_HOST` | No | `0.0.0.0` | Bind address for the backend server. Use `localhost` for local-only testing, `0.0.0.0` to accept external connections (e.g., from Docker or other containers). |
-| `SERVER_PORT` | No | `8000` | Port on which the backend listens. Must match the port exposed in `docker-compose.yml` and used in `api.js`. |
-| `API_BASE_PATH` | No | `/api` | Prefix for all API routes. Used to avoid hardcoding in frontend `api.js`. E.g., `/api/users` becomes `/api/v2/users` if changed. |
-| `DEBUG` | No | `false` | Enables verbose logging and development error pages (if supported by framework). **Never enable in production.** |
+These variables are read by the Python backend server. They can be set directly in the shell, via a `.env` file, or within `docker-compose.yml`.
 
-> 💡 **Tip**: These variables can be set directly in `.env` (see below) or passed via `docker-compose.yml`’s `environment:` section.
+| Variable        | Required | Default Value | Description                                                                                                                                                                                           |
+| :-------------- | :------- | :------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SERVER_HOST`   | No       | `0.0.0.0`     | The network interface the backend server listens on. `0.0.0.0` makes it accessible externally (e.g., from Docker containers), while `localhost` or `127.0.0.1` restricts it to the local machine. |
+| `SERVER_PORT`   | No       | `8000`        | The port number the backend server runs on. This should align with ports exposed in `docker-compose.yml` and any frontend configuration.                                                               |
+| `API_BASE_PATH` | No       | `/api`        | The URL prefix for all backend API endpoints. For example, if set to `/v2/api`, all routes would be prefixed accordingly (e.g., `/v2/api/users`). This aids in versioning and modularity.          |
+| `DEBUG`         | No       | `false`       | Enables debug mode. This often activates verbose logging, detailed error pages, and other development-specific features. **Crucially, this should always be `false` in production environments.** |
 
 ### Frontend (`web/`) Environment Variables
 
-Vite prefixes all injected env vars with `VITE_`. These are **statically replaced at build time**, so changing them requires rebuilding the app (`npm run build`).
+Vite injects these variables into the frontend build process. Variables prefixed with `VITE_` are exposed to the client-side code. Changes to these variables require a frontend rebuild (`npm run build`).
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `VITE_API_URL` | Yes (for builds) | `http://localhost:8000` | Full base URL to the backend server (including path, e.g., `http://localhost:8000/api`). Used by `src/api.js` for all API calls. |
-| `VITE_APP_TITLE` | No | `"MyApp"` | Application title (optional, used in `index.html`). |
-
-> 🔧 **Important**: When running `npm run dev`, Vite automatically populates `VITE_API_URL` from `.env` or defaults to `http://localhost:8000`. However, this assumes:
-> - The backend runs locally on port `8000`  
-> - No proxy is involved  
-> In containerized setups (e.g., Docker Compose), override to `http://backend:8000/api` during build (handled via Dockerfile build args or `.env` at build time).
+| Variable        | Required (at build) | Default Value       | Description                                                                                                                                                                                                                         |
+| :-------------- | :------------------ | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `VITE_API_URL`  | Yes                 | `http://localhost:8000` | **The complete base URL for the backend API**. This is critical. The `src/api.js` file uses this to construct full API request URLs. Include the protocol, host, port, and the `API_BASE_PATH` (e.g., `http://localhost:8000/api`). |
+| `VITE_APP_TITLE`| No                  | `"MyApp"`           | Sets the title of the application, typically used in the HTML `<title>` tag.                                                                                                                                                      |
 
 #### Setting Environment Variables for Development
 
-1. Create a `.env` file in the repo root:
-   ```env
-   # .env
-   SERVER_HOST=0.0.0.0
-   SERVER_PORT=8000
-   API_BASE_PATH=/api
-   DEBUG=true
-   VITE_API_URL=http://localhost:8000/api
-   ```
+1.  **Root `.env` file**: Create a file named `.env` in the repository's top-level directory. This file is often automatically loaded by development tools or scripts.
+    ```env
+    # .env
+    SERVER_HOST=0.0.0.0
+    SERVER_PORT=8000
+    API_BASE_PATH=/api
+    DEBUG=true
+    VITE_API_URL=http://localhost:8000/api
+    ```
 
-2. For **Docker Compose**, create a `.env` file at repo root (read automatically by `docker-compose.yml`):
-   ```env
-   BACKEND_PORT=8000
-   API_BASE_PATH=/api
-   ```
+2.  **Docker Compose `.env` file**: `docker-compose.yml` automatically reads a `.env` file from the same directory. This is useful for configuring containerized services.
+    ```env
+    # .env (for docker-compose)
+    BACKEND_PORT=8000
+    API_BASE_PATH=/api
+    ```
+    Note that `VITE_API_URL` for frontend builds in Docker Compose might need to be configured differently (e.g., via build arguments or by setting it during `npm run dev` inside the container).
 
-> ⚠️ **Never commit secrets or production credentials to `.env`**. Use `.env.example` to document required variables for collaborators.
+> **Security**: Never commit sensitive credentials or production secrets to `.env` files. Use a `.env.example` file to document the necessary variables and their expected format for collaborators.
 
 ---
 
 ## Native Development (Non-Containerized)
 
-This mode runs services directly on your host machine for fast hot-reloading during frontend development and debug-friendly backend iteration (e.g., using VS Code’s Python debugger or `uvicorn --reload`).
+This approach runs the backend and frontend services directly on your host machine, allowing for faster feedback loops, especially with hot-reloading for the frontend.
 
-### 1. Setup Backend (`server.py`)
+### 1. Backend Setup (`server.py`)
 
-#### Install Dependencies
-```bash
-# Create and activate virtual environment (recommended)
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# .\venv\Scripts\activate  # Windows
+#### Install Python Dependencies
 
-# Install required packages
-pip install -r requirements.txt  # If present; otherwise install manually:
-pip install fastapi uvicorn python-multipart python-dotenv
-```
+It's highly recommended to use a Python virtual environment to isolate project dependencies.
 
-> 📌 **Note**: If `requirements.txt` does not exist, create one:
-> ```bash
-> pip freeze > requirements.txt
-> ```
-> and commit it for reproducibility.
+1.  **Create and activate a virtual environment**:
+    ```bash
+    # Create the environment (e.g., named 'venv')
+    python -m venv venv
 
-#### Run Backend
-```bash
-# Set environment variables (already defined in `.env` if using dotenv)
-export $(cat .env | xargs)  # Bash (load .env into shell)
-# OR manually:
-export SERVER_PORT=8000
-export API_BASE_PATH=/api
-export DEBUG=true
+    # Activate the environment
+    # Linux/macOS:
+    source venv/bin/activate
+    # Windows:
+    # .\venv\Scripts\activate
+    ```
+    Your terminal prompt should now indicate the active environment (e.g., `(venv) your-prompt$`).
 
-# Run server (if using uvicorn)
-uvicorn server:app --reload --host $SERVER_HOST --port $SERVER_PORT
-```
+2.  **Install dependencies using pip**:
+    If a `requirements.txt` file exists in the root directory:
+    ```bash
+    pip install -r requirements.txt
+    ```
+    If `requirements.txt` is not present, install the necessary packages manually:
+    ```bash
+    pip install fastapi uvicorn python-multipart python-dotenv
+    ```
+    It's good practice to generate `requirements.txt` after installing dependencies:
+    ```bash
+    pip freeze > requirements.txt
+    ```
 
-> 💡 The backend should start on `http://localhost:8000`. Confirm by visiting `http://localhost:8000/health` (returns `{"status": "ok"}`) or checking logs.
+#### Run the Backend Server
 
-### 2. Setup Frontend (`web/`)
+Ensure your `.env` file is in the repository root, or set environment variables manually.
 
-#### Install Dependencies
+1.  **Load environment variables (Bash/Zsh)**:
+    ```bash
+    export $(cat .env | xargs)
+    ```
+    Alternatively, set them individually:
+    ```bash
+    export SERVER_PORT=8000
+    export API_BASE_PATH=/api
+    export DEBUG=true
+    ```
+
+2.  **Start the server using `uvicorn`**:
+    The `server.py` file is assumed to contain an `app` object (e.g., a FastAPI or Starlette instance).
+    ```bash
+    uvicorn server:app --reload --host $SERVER_HOST --port $SERVER_PORT
+    ```
+    *   `server`: refers to the `server.py` file.
+    *   `app`: refers to the ASGI application instance within `server.py`.
+    *   `--reload`: automatically restarts the server when code changes are detected.
+    *   `--host $SERVER_HOST --port $SERVER_PORT`: uses the environment variables for binding.
+
+The backend should now be accessible at `http://localhost:8000`. You can verify this by accessing `http://localhost:8000/health` (if this endpoint exists) or checking the server logs.
+
+### 2. Frontend Setup (`web/`)
+
+#### Install Node.js Dependencies
+
+Navigate to the `web` directory and install the frontend dependencies.
+
 ```bash
 cd web
 npm install
 ```
 
-#### Configure API Endpoint (Dev Only)
-Ensure `src/api.js` uses dynamic URLs. If hardcoded, update it to use:
-```js
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-export const get = async (path) => {
-  const res = await fetch(`${API_BASE}${path}`);
-  return res.json();
+#### Configure API URL (if necessary)
+
+The `src/api.js` file should be configured to use `import.meta.env.VITE_API_URL`. If it uses a hardcoded URL, update it to dynamically resolve the backend URL. Example using `fetch`:
+
+```javascript
+// web/src/api.js
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+
+export const get = async (endpoint) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`);
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
+  return response.json();
 };
+
+// Add other methods like post, put, delete as needed
 ```
 
-#### Run Dev Server
+#### Run the Frontend Development Server
+
+Start the Vite development server for rapid frontend development with hot module replacement (HMR).
+
 ```bash
-# Start frontend dev server with hot reload
+# Ensure you are in the 'web' directory
+cd web
 npm run dev
-# Typically exposes app at http://localhost:5173
 ```
+This command typically starts the development server on `http://localhost:5173` (port may vary). All API requests made by the frontend will be directed to the URL specified in `VITE_API_URL`. This setup supports hot-reloading for frontend code changes, ensuring instant updates in the browser.
 
-> ✅ You should now be able to interact with the app via `http://localhost:5173`, with all `/api/*` calls proxied to `http://localhost:8000/api`.  
-> 🔁 Hot reload works for Vue changes, but backend changes require server restart (unless `--reload` is used).
+> **Result**: With both the backend and frontend running natively, you can access the application via the frontend's development server URL (e.g., `http://localhost:5173`). API calls will be made to the native backend server (`http://localhost:8000/api`).
 
 ---
 
 ## Containerized Local Development (Docker Compose)
 
-Use this for a consistent, isolated environment—ideal for reproducing CI/CD behavior, testing environment-specific behavior, or when dependencies (e.g., databases) are added later.
+Using Docker Compose provides an isolated and consistent environment that mirrors production configurations. This is especially useful for managing dependencies and ensuring reproducibility.
 
 ### Prerequisites
-- Docker Engine ≥ 24.x (Docker Desktop ≥ 4.25.x for macOS/Windows)
-- Docker Compose ≥ 2.20.x
 
-Verify:
+*   Docker Engine installed and running.
+*   Docker Compose installed and running.
+
+Verify installations:
 ```bash
-docker --version    # e.g., Docker version 24.0.7, build afdd53b
+docker --version
 docker compose version
 ```
 
-### Build & Run
+### Build and Run Services
 
-1. **Build & Start Services**
-   ```bash
-   docker compose up --build
-   ```
+1.  **Build and Start Services**:
+    From the repository's root directory, execute:
+    ```bash
+    docker compose up --build
+    ```
+    This command builds the Docker images for the backend and frontend (if not already built) and starts the services defined in `docker-compose.yml`.
 
-   > ⚠️ **Default ports**:  
-   > - Frontend (Nginx): `80` (mapped to host `80`)  
-   > - Backend: `8000` (exposed only internally via Docker network)  
-   > Access the app at `http://localhost` (port `80`), which proxies `/api` to `backend:8000`.
+    *   **Access**: The frontend (served by Nginx) is typically available at `http://localhost:80` (default HTTP port). API requests prefixed with `/api` are proxied by Nginx to the backend service, which is accessible within the Docker network as `http://backend:8000`.
 
-2. **Environment Configuration**
-   - The `docker-compose.yml` includes:
-     ```yaml
-     environment:
-       - SERVER_PORT=${BACKEND_PORT:-8000}
-       - API_BASE_PATH=/api
-     ```
-   - For frontend, `VITE_API_URL` is set during build via Dockerfile build args:
-     ```dockerfile
-     ARG VITE_API_URL=http://backend:8000/api
-     ENV VITE_API_URL=$VITE_API_URL
-     ```
+2.  **Environment Configuration within Docker**:
+    *   **Backend**: `docker-compose.yml` defines environment variables for the backend service:
+        ```yaml
+        services:
+          backend:
+            build: .
+            ports:
+              - "${BACKEND_PORT:-8000}:8000"
+            environment:
+              - SERVER_HOST=0.0.0.0
+              - SERVER_PORT=${BACKEND_PORT:-8000}
+              - API_BASE_PATH=/api
+              - DEBUG=${DEBUG:-false}
+            # ... other configurations
+        ```
+        The `.env` file in the root directory influences `${BACKEND_PORT}` and `${DEBUG}`.
+    *   **Frontend**: The `web/Dockerfile` sets `VITE_API_URL` during the image build process:
+        ```dockerfile
+        # web/Dockerfile
+        FROM nginx:alpine AS production
+        # ... build steps ...
+        ARG NODE_ENV=production
+        ARG VITE_API_URL=http://backend:8000/api/ # Default for container network
+        ENV NODE_ENV=${NODE_ENV}
+        ENV VITE_API_URL=${VITE_API_URL}
+        # ... copy dist to nginx ...
+        ```
+        This ensures the frontend inside the container knows how to reach the backend service (`http://backend:8000/api`).
 
-3. **Development Workflow**
-   - **Backend**: Edit `server.py` and run:
-     ```bash
-     docker compose restart backend
-     ```
-     Or add volume mounts for live reloading (if supported by framework):
-     ```yaml
-     services:
-       backend:
-         volumes:
-           - ./server.py:/app/server.py:ro
-           # For uvicorn --reload, bind-mount the entire directory (advanced)
-     ```
-   - **Frontend**: Use `docker compose up` *without* `--build` to retain old build, then start Vite dev server inside the container:
-     ```bash
-     docker compose exec frontend npm run dev -- --host 0.0.0.0 --port 5173
-     ```
-     Access at `http://localhost:5173` (if exposed in `docker-compose.yml`).  
-     Alternatively, mount source:
-     ```yaml
-     frontend:
-       volumes:
-         - ./web:/usr/src/web
-     ```
-     And adjust `nginx.conf` to serve from `/usr/src/web/dist` (not recommended for speed).
+3.  **Development Workflow with Docker Compose**:
 
-> 💡 **Tip**: For production-like development, use `docker compose --profile dev up --build` with profiles defined in `docker-compose.yml`.
+    *   **Backend Code Changes**:
+        Edit `server.py`. To apply changes, you can either:
+        *   Restart the backend service:
+            ```bash
+            docker compose restart backend
+            ```
+        *   Enable live reloading (if supported by your framework, e.g., `uvicorn --reload`). This often requires mounting the source code directory as a volume:
+            ```yaml
+            # docker-compose.yml snippet
+            services:
+              backend:
+                volumes:
+                  - .:/app  # Mount the entire project root, or specific files/dirs
+            ```
+            Note: Mounting the entire project might be necessary for `--reload` to work effectively, depending on the framework's watch mechanism.
 
----
+    *   **Frontend Code Changes**:
+        For rapid frontend iteration, you can run the Vite dev server *inside* its container:
+        ```bash
+        # Ensure the frontend service is running (e.g., via 'docker compose up -d frontend')
+        docker compose exec frontend npm run dev -- --host 0.0.0.0 --port 5173
+        ```
+        Access the app at `http://localhost:5173` (you might need to expose this port in `docker-compose.yml`).
+        Alternatively, use volume mounts for the `web` directory to enable Vite's HMR directly from your host machine:
+        ```yaml
+        # docker-compose.yml snippet
+        services:
+          frontend:
+            volumes:
+              - ./web:/usr/src/web # Mount the web directory
+        ```
+        Then, execute `npm run dev` inside the `frontend` container.
 
-## Troubleshooting
-
-### Common Issues
-
-1. **Frontend can’t reach backend (`CORS` or `ERR_CONNECTION_REFUSED`)**
-   - Ensure `VITE_API_URL` matches the backend host:port *and* includes the `/api` path.
-   - In native mode: `http://localhost:8000/api`  
-   - In Docker mode: `http://backend:8000/api` (container network) or `http://localhost:8000/api` (if using `network_mode: host` or port-forwarding).
-
-2. **`Module not found` errors in frontend**
-   - Delete `node_modules` + `package-lock.json` and re-run `npm install`.
-   - Ensure `vite.config.js` isn’t accidentally excluding `node_modules`:
-     ```js
-     export default defineConfig({
-       resolve: {
-         alias: { '@': path.resolve(__dirname, './src') }
-       }
-     });
-     ```
-
-3. **Backend fails to start with `ModuleNotFoundError`**
-   - Confirm dependencies in `requirements.txt`:
-     ```dockerfile
-     RUN pip install --no-cache-dir -r requirements.txt
-     ```
-   - If `requirements.txt` is missing, generate it (`pip freeze > requirements.txt`) and rebuild:
-     ```bash
-     docker compose build --no-cache backend
-     ```
-
-4. **SPA routing (e.g., `/dashboard`) returns 404**
-   - Verify `web/nginx.conf` has:
-     ```nginx
-     location / {
-       try_files $uri $uri/ /index.html;
-     }
-     ```
-
-5. **`docker compose up` fails with `ERROR: manifest for ... not found`**
-   - Check `docker-compose.yml` for typos (e.g., `build: web/` vs `./web`).
-   - Re-run with `--build --force-recreate`.
+> **Performance Tip**: Volume mounts can sometimes be slower than bind mounts or copying files. For optimal build performance, rely on Docker layers for dependencies and code, rebuilding images as needed (`docker compose build frontend`).
 
 ---
 
-## Testing & Validation
+## Troubleshooting Common Issues
 
-After setup, verify the app end-to-end:
+### Frontend Connection Problems (`CORS`, `ERR_CONNECTION_REFUSED`)
 
-1. **Backend health check**
-   ```bash
-   curl http://localhost:8000/health  # Native: returns `{"status": "ok"}`
-   curl http://localhost/health       # Docker: same (proxied by Nginx)
-   ```
+*   **Check `VITE_API_URL`**: Ensure it correctly points to the backend's host, port, and API base path.
+    *   **Native**: `http://localhost:8000/api`
+    *   **Docker Compose**: `http://backend:8000/api` (within Docker network) or `http://localhost:8000/api` (if mapped to host).
+*   **Backend Host Binding**: Verify `SERVER_HOST` is set to `0.0.0.0` for the backend when running in Docker, allowing it to accept connections from the frontend container.
+*   **CORS Configuration**: Ensure the backend CORS middleware is configured correctly if you encounter CORS errors.
 
-2. **API endpoints**
-   ```bash
-   curl http://localhost:8000/api/users  # Native
-   curl http://localhost/api/users       # Docker
-   ```
+### Frontend Build/Runtime Errors (`Module not found`)
 
-3. **Frontend UI**
-   - Visit `http://localhost` (Docker) or `http://localhost:5173` (native dev).
-   - Open DevTools → Network tab: Confirm API calls succeed (status `200`) and include expected JSON.
+*   **Reinstall Dependencies**: Delete `web/node_modules` and `web/package-lock.json`, then run `npm install`.
+*   **Vite Configuration**: Check `vite.config.js` for any incorrect aliases or `exclude` patterns in `resolve.modules` that might prevent modules from being found.
 
-4. **Full integration**
-   - Log in (if applicable) → navigate to `/dashboard` → verify data loads.
+### Backend Installation Failures (`ModuleNotFoundError`)
+
+*   **Dependencies**: Ensure all required packages are listed in `requirements.txt`. If not, update it (`pip freeze > requirements.txt`) and rebuild the backend Docker image (`docker compose build backend --no-cache`).
+*   **Python Version**: Confirm the base image in `Dockerfile` matches the project's Python version requirements.
+
+### Single Page Application (SPA) Routing Issues (`404` for routes like `/dashboard`)
+
+*   **Nginx Configuration**: Verify `web/nginx.conf` includes a `try_files` directive to fall back to `/index.html` for unmatched routes:
+    ```nginx
+    location / {
+      root /usr/share/nginx/html; # Or wherever static files are copied
+      index index.html index.htm;
+      try_files $uri $uri/ /index.html;
+    }
+    ```
+
+### Docker Compose Errors (`manifest not found`, service startup failures)
+
+*   **Typos**: Double-check service names, image names, and paths in `docker-compose.yml`.
+*   **Cache Issues**: Use `docker compose up --build --force-recreate` to ensure fresh image builds and container startups.
+*   **Resource Limits**: Ensure your system has sufficient resources (RAM, disk space) for Docker operations.
 
 ---
 
-## Next Steps
+## Testing and Validation
 
-- **Add dependencies**: Extend `requirements.txt` (backend) or `package.json` (frontend) as needed.
-- **CI/CD alignment**: Ensure `Dockerfile` and `docker-compose.yml` match `.github/workflows/main.yml`:
-  - Same base images (`python:3.11-slim`, `nginx:alpine`)
-  - Matching build args (`VITE_API_URL`)
-  - Identical environment variables
-- **External integrations**: When adding DBs or APIs, update `.env.example` and document variable usage.
-- **Testing**: Add `pytest` or `vitest` suites and integrate into CI.
+After setting up your local environment, perform these checks to ensure the application is functioning correctly:
 
-This guide remains synced with repository evolution. Update this file when:
-- Adding new environment variables
-- Changing ports or routes
-- Modifying Docker builds or compose services  
-- Updating Node.js/Python version requirements  
+1.  **Backend Health Check**:
+    *   **Native**: `curl http://localhost:8000/health`
+    *   **Docker Compose**: `curl http://localhost/health` (Nginx proxies to backend)
+    Expected output: `{"status": "ok"}` (or similar success indicator).
 
-For further assistance, refer to:
-- `docs/api.md` (if present)  
-- `README.md`  
-- `server.py`’s inline documentation  
-- Vue 3 + Vite [official guides](https://vitejs.dev/guide/)
+2.  **API Endpoint Verification**:
+    *   **Native**: `curl http://localhost:8000/api/users` (Replace `/users` with an actual endpoint)
+    *   **Docker Compose**: `curl http://localhost/api/users`
+    Check for valid JSON responses. Refer to `docs/openapi.yaml` for available endpoints.
+
+3.  **Frontend UI Interaction**:
+    *   Access the application in your browser at the appropriate URL (`http://localhost:5173` for native dev, `http://localhost` for Docker Compose).
+    *   Use browser Developer Tools (Network tab) to confirm that API requests are successful (HTTP 200 OK) and return the expected data.
+
+4.  **End-to-End Functionality**:
+    *   If the application has authentication, test the login flow.
+    *   Navigate through different sections of the UI (e.g., accessing `/dashboard` or user profile pages) to ensure client-side routing and data loading work seamlessly.
+
+---
+
+## Next Steps and Maintenance
+
+### Adding New Dependencies
+
+*   **Backend**: Update `requirements.txt` after installing new Python packages (`pip install <package>`, then `pip freeze > requirements.txt`).
+*   **Frontend**: Add new Node.js packages using `npm install <package>` and commit the updated `package.json` and `package-lock.json`.
+
+### Aligning with CI/CD
+
+Ensure the `Dockerfile`, `docker-compose.yml`, and the CI pipeline configuration (`.github/workflows/main.yml`) are consistent regarding:
+*   Base Docker images used.
+*   Environment variables injected.
+*   Build arguments (e.g., `VITE_API_URL`).
+*   Build commands and processes.
+
+This consistency prevents discrepancies between local development and automated builds.
+
+### Integrating External Services (Databases, Caches)
+
+When introducing new services (e.g., PostgreSQL, Redis):
+*   Update `docker-compose.yml` to include their definitions.
+*   Add necessary environment variables to `.env` and document them in `.env.example`.
+*   Configure the backend application (`server.py`) to connect to these services using the environment variables.
+
+### Adding Automated Tests
+
+*   **Backend**: Implement tests using a framework like `pytest`.
+*   **Frontend**: Use Vitest or Jest for unit and integration tests.
+*   Ensure test commands are available in `scripts` (in `package.json`) and integrate them into the CI pipeline.
+
+### Maintaining Documentation
+
+This `README.md` should be updated whenever significant changes occur:
+*   New environment variables are introduced or changed.
+*   Default ports or API paths are modified.
+*   The structure of Docker builds or Compose services changes.
+*   Core dependencies (Node.js, Python versions) are updated.
+
+**Further Resources**:
+*   Consult `docs/openapi.yaml` for detailed API endpoint specifications.
+*   Review `server.py` for inline code documentation.
+*   Refer to the official [Vue.js](https://vuejs.org/guide/) and [Vite](https://vitejs.dev/guide/) documentation for frontend specifics.

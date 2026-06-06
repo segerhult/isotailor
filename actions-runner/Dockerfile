@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   curl \
   git \
   jq \
+  python3 \
   tar \
   && rm -rf /var/lib/apt/lists/*
 
@@ -27,5 +28,10 @@ COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh && chown -R runner:runner /actions-runner
 
 USER runner
+
+ENV PORT=8080
+ENV RUNNER_HEALTH_PORT=8080
+
+EXPOSE 8080
 
 ENTRYPOINT ["/entrypoint.sh"]

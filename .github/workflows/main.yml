@@ -27,7 +27,7 @@ jobs:
           node-version: '20'
 
       - name: Run Orchestra PR reviewer
-        run: npx orchestra-ai-devops pr-review .
+        run: npx orchestra-ai-devops pr-review ${{ github.event.pull_request.number }}
         env:
           OPENAI_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           OPENAI_BASE_URL: https://openrouter.ai/api/v1

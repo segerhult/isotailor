@@ -7,9 +7,8 @@ RUNNER_NAME="${RUNNER_NAME:-$(hostname)}"
 RUNNER_LABELS="${RUNNER_LABELS:-self-hosted,linux,x64}"
 RUNNER_WORKDIR="${RUNNER_WORKDIR:-_work}"
 RUNNER_EPHEMERAL="${RUNNER_EPHEMERAL:-0}"
-
 RUNNER_HEALTH_SERVER="${RUNNER_HEALTH_SERVER:-1}"
-RUNNER_HEALTH_PORT="${RUNNER_HEALTH_PORT:-8080}"
+RUNNER_HEALTH_PORT="${RUNNER_HEALTH_PORT:-${PORT:-8080}}"
 
 if [[ -z "${RUNNER_REPO_URL}" ]]; then
   echo "RUNNER_REPO_URL is required (e.g. https://github.com/OWNER/REPO or https://github.com/ORG)"
@@ -21,40 +20,11 @@ if [[ -z "${RUNNER_TOKEN}" ]]; then
   exit 1
 fi
 
-if [[ "${RUNNER_HEALTH_SERVER}" == "1" || "${RUNNER_HEALTH_SERVER}" == "true" || "${RUNNER_HEALTH_SERVER}" == "yes" ]]; then
-  if command -v python3 >/dev/null 2>&1; then
-    python3 - <<'PY' >/dev/null 2>&1 &
-import os
-import socketserver
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler
-
-PORT = int(os.environ.get("RUNNER_HEALTH_PORT") or "8080")
-
-class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", "text/plain; charset=utf-8")
-        self.end_headers()
-        self.wfile.write(b"ok")
-
-    def do_HEAD(self):
-        self.send_response(HTTPStatus.OK)
-        self.end_headers()
-
-    def log_message(self, fmt, *args):
-        return
-
-class Server(socketserver.ThreadingMixIn, socketserver.TCPServer):
-    allow_reuse_address = True
-
-with Server(("0.0.0.0", PORT), Handler) as httpd:
-    httpd.serve_forever()
-PY
-  fi
-fi
-
 cd /actions-runner
+
+if [[ "${RUNNER_HEALTH_SERVER}" == "1" || "${RUNNER_HEALTH_SERVER}" == "true" || "${RUNNER_HEALTH_SERVER}" == "yes" ]]; then
+  python3 -m http.server "${RUNNER_HEALTH_PORT}" --bind 0.0.0.0 >/dev/null 2>&1 &
+fi
 
 cleanup() {
   if [[ -f .runner ]]; then

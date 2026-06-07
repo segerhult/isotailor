@@ -12,13 +12,39 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
+from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 
 REPO_ROOT = Path(__file__).resolve().parent
 DATA_DIR = REPO_ROOT / "data"
 UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_INDEX_PATH = DATA_DIR / "uploads.json"
+
+DISTRO_CATALOG = [
+    {
+        "id": "ubuntu-24.04-desktop-amd64",
+        "name": "Ubuntu Desktop",
+        "version": "24.04 LTS",
+        "arch": "amd64",
+        "iso_url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-desktop-amd64.iso",
+    },
+    {
+        "id": "ubuntu-24.04-live-server-amd64",
+        "name": "Ubuntu Server",
+        "version": "24.04 LTS",
+        "arch": "amd64",
+        "iso_url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso",
+    },
+    {
+        "id": "debian-12.11-amd64-netinst",
+        "name": "Debian",
+        "version": "12.11",
+        "arch": "amd64",
+        "iso_url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso",
+    },
+]
 
 
 DEFAULT_SOFTWARE = [
@@ -120,6 +146,72 @@ def sha256_file(file_path: Path) -> str:
         for chunk in iter(lambda: f.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def get_distribution(distribution_id: str) -> Optional[dict]:
+    for distro in DISTRO_CATALOG:
+        if distro.get("id") == distribution_id:
+            return distro
+    return None
+
+
+def download_iso(url: str, dest_path: Path, max_bytes: int = 20 * 1024 * 1024 * 1024) -> int:
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        raise ValueError("only https urls are allowed")
+
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+
+    req = Request(url, headers={"User-Agent": "isotailor/0.1"})
+    written = 0
+    try:
+        with urlopen(req, timeout=30) as resp:
+            with dest_path.open("wb") as out_f:
+                while True:
+                    chunk = resp.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    out_f.write(chunk)
+                    written += len(chunk)
+                    if written > max_bytes:
+                        raise ValueError("download too large")
+    except URLError as e:
+        raise ValueError(f"download failed: {e}") from e
+    return written
+
+
+def split_csv_params(values: list[str]) -> list[str]:
+    parts: list[str] = []
+    for v in values:
+        for piece in v.split(","):
+            piece = piece.strip()
+            if piece:
+                parts.append(piece)
+    return parts
+
+
+def upload_matches(meta: dict, q: str, software_filters: list[str]) -> bool:
+    if software_filters:
+        sw = meta.get("software", [])
+        if not isinstance(sw, list):
+            sw = []
+        sw_set = {str(s).lower() for s in sw}
+        for required in software_filters:
+            if required.lower() not in sw_set:
+                return False
+
+    if not q:
+        return True
+
+    q_lower = q.lower()
+    if q_lower in str(meta.get("id", "")).lower():
+        return True
+    if q_lower in str(meta.get("original_filename", "")).lower():
+        return True
+    sw = meta.get("software", [])
+    if isinstance(sw, list) and any(q_lower in str(s).lower() for s in sw):
+        return True
+    return False
 
 
 def page(title: str, body: str) -> bytes:
@@ -321,6 +413,10 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, {"default_software": DEFAULT_SOFTWARE})
             return
 
+        if path == "/api/distributions":
+            self.send_json(HTTPStatus.OK, {"distributions": DISTRO_CATALOG})
+            return
+
         if path == "/api/stats":
             index = load_index()
             uploads = index.get("uploads", {})
@@ -338,6 +434,62 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
             self.send_json(
                 HTTPStatus.OK,
                 {"uploads_count": len(uploads), "total_iso_bytes": total_bytes, "time": now_iso()},
+            )
+            return
+
+        if path == "/api/routes":
+            self.send_json(
+                HTTPStatus.OK,
+                {
+                    "routes": [
+                        {"method": "GET", "path": "/api/health"},
+                        {"method": "GET", "path": "/api/default-software"},
+                        {"method": "GET", "path": "/api/distributions"},
+                        {"method": "GET", "path": "/api/stats"},
+                        {"method": "GET", "path": "/api/routes"},
+                        {"method": "GET", "path": "/api/uploads"},
+                        {"method": "GET", "path": "/api/uploads/search?q=...&software=..."},
+                        {"method": "GET", "path": "/api/uploads/{id}"},
+                        {"method": "GET", "path": "/api/uploads/{id}/iso"},
+                        {"method": "GET", "path": "/api/uploads/{id}/manifest"},
+                        {"method": "GET", "path": "/api/uploads/{id}/install-script"},
+                        {"method": "GET", "path": "/api/uploads/{id}/info?sha256=1"},
+                        {"method": "POST", "path": "/api/uploads"},
+                        {"method": "POST", "path": "/api/uploads/from-distribution"},
+                        {"method": "PUT", "path": "/api/uploads/{id}/software"},
+                        {"method": "DELETE", "path": "/api/uploads/{id}"},
+                    ]
+                },
+            )
+            return
+
+        if path == "/api/uploads/search":
+            q = (query.get("q", [""])[0] or "").strip()
+            software_filters = split_csv_params(query.get("software", []))
+            limit_raw = query.get("limit", ["50"])[0]
+            try:
+                limit = int(limit_raw)
+            except ValueError:
+                limit = 50
+            limit = max(1, min(200, limit))
+
+            index = load_index()
+            uploads = index.get("uploads", {})
+            matched = []
+            for meta in uploads.values():
+                if upload_matches(meta, q=q, software_filters=software_filters):
+                    matched.append(meta)
+
+            matched.sort(key=lambda m: m.get("created_at", ""), reverse=True)
+            self.send_json(
+                HTTPStatus.OK,
+                {
+                    "q": q,
+                    "software": software_filters,
+                    "count": len(matched),
+                    "limit": limit,
+                    "uploads": matched[:limit],
+                },
             )
             return
 
@@ -523,6 +675,72 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path == "/api/uploads/from-distribution":
+            body = self.read_json_body()
+            if body is None:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "expected_json"})
+                return
+
+            distribution_id = body.get("distribution_id", "")
+            if not isinstance(distribution_id, str) or not distribution_id.strip():
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_distribution_id"})
+                return
+            distro = get_distribution(distribution_id.strip())
+            if not distro:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "distribution_not_found"})
+                return
+
+            software_list = body.get("software", [])
+            custom_text = body.get("custom_software", "")
+            if isinstance(software_list, str):
+                software_list = [software_list]
+            if not isinstance(software_list, list) or not all(isinstance(s, str) for s in software_list):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_software"})
+                return
+            if not isinstance(custom_text, str):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_custom_software"})
+                return
+
+            ensure_storage()
+            upload_id = uuid.uuid4().hex
+            stored_iso_path = UPLOADS_DIR / f"{upload_id}.iso"
+            iso_url = str(distro.get("iso_url", ""))
+            try:
+                download_iso(iso_url, stored_iso_path)
+            except ValueError as e:
+                try:
+                    if stored_iso_path.exists():
+                        stored_iso_path.unlink()
+                except OSError:
+                    pass
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
+                return
+
+            original_filename = os.path.basename(urlparse(iso_url).path) or f"{upload_id}.iso"
+            software = normalize_software_list(software_list + parse_custom_software(custom_text))
+
+            index = load_index()
+            uploads = index.setdefault("uploads", {})
+            meta = {
+                "id": upload_id,
+                "original_filename": original_filename,
+                "iso_path": str(stored_iso_path.relative_to(REPO_ROOT)),
+                "created_at": now_iso(),
+                "software": software,
+                "source": {
+                    "type": "distribution",
+                    "distribution_id": distro.get("id"),
+                    "name": distro.get("name"),
+                    "version": distro.get("version"),
+                    "arch": distro.get("arch"),
+                    "iso_url": iso_url,
+                },
+            }
+            uploads[upload_id] = meta
+            save_index(index)
+            self.send_json(HTTPStatus.CREATED, {"upload": meta})
+            return
 
         if path == "/api/uploads":
             content_type = self.headers.get("Content-Type", "")

@@ -32,6 +32,10 @@ export async function getDefaultSoftware() {
   return fetchJson("/api/default-software");
 }
 
+export async function getDistributions() {
+  return fetchJson("/api/distributions");
+}
+
 export async function listUploads() {
   return fetchJson("/api/uploads");
 }
@@ -54,6 +58,18 @@ export async function uploadIso({ file, software, customSoftware }) {
     form.append("custom_software", customSoftware);
   }
   return fetchJson("/api/uploads", { method: "POST", body: form });
+}
+
+export async function createFromDistribution({ distributionId, software, customSoftware }) {
+  return fetchJson("/api/uploads/from-distribution", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      distribution_id: distributionId,
+      software: software || [],
+      custom_software: customSoftware || ""
+    })
+  });
 }
 
 export async function updateSoftware(uploadId, { software, customSoftware }) {

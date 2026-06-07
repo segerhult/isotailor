@@ -148,38 +148,6 @@ def sha256_file(file_path: Path) -> str:
     return h.hexdigest()
 
 
-def get_distribution(distribution_id: str) -> Optional[dict]:
-    for distro in DISTRO_CATALOG:
-        if distro.get("id") == distribution_id:
-            return distro
-    return None
-
-
-def download_iso(url: str, dest_path: Path, max_bytes: int = 20 * 1024 * 1024 * 1024) -> int:
-    parsed = urlparse(url)
-    if parsed.scheme != "https":
-        raise ValueError("only https urls are allowed")
-
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
-
-    req = Request(url, headers={"User-Agent": "isotailor/0.1"})
-    written = 0
-    try:
-        with urlopen(req, timeout=30) as resp:
-            with dest_path.open("wb") as out_f:
-                while True:
-                    chunk = resp.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    out_f.write(chunk)
-                    written += len(chunk)
-                    if written > max_bytes:
-                        raise ValueError("download too large")
-    except URLError as e:
-        raise ValueError(f"download failed: {e}") from e
-    return written
-
-
 def split_csv_params(values: list[str]) -> list[str]:
     parts: list[str] = []
     for v in values:
@@ -444,7 +412,6 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
                     "routes": [
                         {"method": "GET", "path": "/api/health"},
                         {"method": "GET", "path": "/api/default-software"},
-                        {"method": "GET", "path": "/api/distributions"},
                         {"method": "GET", "path": "/api/stats"},
                         {"method": "GET", "path": "/api/routes"},
                         {"method": "GET", "path": "/api/uploads"},
@@ -455,7 +422,6 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
                         {"method": "GET", "path": "/api/uploads/{id}/install-script"},
                         {"method": "GET", "path": "/api/uploads/{id}/info?sha256=1"},
                         {"method": "POST", "path": "/api/uploads"},
-                        {"method": "POST", "path": "/api/uploads/from-distribution"},
                         {"method": "PUT", "path": "/api/uploads/{id}/software"},
                         {"method": "DELETE", "path": "/api/uploads/{id}"},
                     ]

@@ -6,6 +6,7 @@
       <CreateCard
         :busy="busy"
         :default-software="defaultSoftware"
+        :distributions="distributions"
         :error="createError"
         :reset-key="createResetKey"
         @create="onCreate"
@@ -51,8 +52,10 @@ import TopBar from "../components/TopBar.vue";
 import UploadDetailCard from "../components/UploadDetailCard.vue";
 import UploadsCard from "../components/UploadsCard.vue";
 import {
+  createFromDistribution,
   deleteUpload,
   getDefaultSoftware,
+  getDistributions,
   getInstallManifest,
   getUpload,
   listRoutes,
@@ -68,6 +71,7 @@ export default {
     return {
       busy: false,
       defaultSoftware: [],
+      distributions: [],
       uploads: [],
       routes: null,
       selectedId: null,
@@ -97,8 +101,14 @@ export default {
       this.createError = "";
       this.apiError = "";
       try {
-        const [defaults, uploads, routes] = await Promise.all([getDefaultSoftware(), listUploads(), listRoutes()]);
+        const [defaults, distros, uploads, routes] = await Promise.all([
+          getDefaultSoftware(),
+          getDistributions(),
+          listUploads(),
+          listRoutes()
+        ]);
         this.defaultSoftware = defaults.default_software || [];
+        this.distributions = distros.distributions || [];
         this.uploads = uploads.uploads || [];
         this.routes = routes;
         if (this.selectedId) {
@@ -144,9 +154,18 @@ export default {
       this.busy = true;
       this.createError = "";
       try {
-        const resp = await uploadIso(payload);
+        let resp;
+        if (payload && payload.mode === "distribution") {
+          resp = await createFromDistribution({
+            distributionId: payload.distributionId,
+            software: payload.software,
+            customSoftware: payload.customSoftware
+          });
+        } else {
+          resp = await uploadIso(payload);
+        }
         const upload = resp.upload;
-        this.createResetKey += 1
+        this.createResetKey += 1;
         await this.refreshAll();
         if (upload && upload.id) {
           await this.selectUpload(upload.id);

@@ -73,6 +73,18 @@ export async function uploadIso({ file, software, customSoftware }) {
   return fetchJson("/api/uploads", { method: "POST", body: form });
 }
 
+export async function createFromDistribution({ distributionId, software, customSoftware }) {
+  return fetchJson("/api/uploads/from-distribution", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      distribution_id: distributionId,
+      software: software || [],
+      custom_software: customSoftware || ""
+    })
+  });
+}
+
 export async function updateSoftware(uploadId, { software, customSoftware }) {
   return fetchJson(`/api/uploads/${uploadId}/software`, {
     method: "PUT",

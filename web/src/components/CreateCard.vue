@@ -2,8 +2,30 @@
   <div class="card">
     <h2>Create</h2>
     <form @submit.prevent="submit">
-      <label class="label">ISO file</label>
-      <input class="input" type="file" accept=".iso" required @change="onFileChange" />
+      <label class="label">ISO source</label>
+      <select class="select" v-model="source">
+        <option value="upload">Upload .iso</option>
+        <option value="distribution">Pick distribution</option>
+      </select>
+
+      <div v-if="source === 'upload'">
+        <label class="label">ISO file</label>
+        <input class="input" type="file" accept=".iso" required @change="onFileChange" />
+      </div>
+
+      <div v-else>
+        <label class="label">Distribution</label>
+        <select class="select" v-model="distributionId" :disabled="!distributions.length">
+          <option value="" disabled>Select a distribution…</option>
+          <option v-for="d in distributions" :key="d.id" :value="d.id">
+            {{ d.name }} {{ d.version }} ({{ d.arch }})
+          </option>
+        </select>
+        <div class="muted" v-if="selectedDistribution && selectedDistribution.iso_url">
+          Downloads: {{ selectedDistribution.iso_url }}
+        </div>
+        <div class="muted" v-else-if="!distributions.length">Loading…</div>
+      </div>
 
       <div class="row">
         <div>
@@ -27,7 +49,9 @@
       </div>
 
       <div class="actions">
-        <button class="btn primary" type="submit" :disabled="busy || !file">Upload</button>
+        <button class="btn primary" type="submit" :disabled="submitDisabled">
+          {{ source === "upload" ? "Upload" : "Download + Create" }}
+        </button>
       </div>
       <div v-if="error" class="error">{{ error }}</div>
     </form>
@@ -39,20 +63,35 @@ export default {
   props: {
     busy: { type: Boolean, required: true },
     defaultSoftware: { type: Array, required: true },
+    distributions: { type: Array, required: true },
     error: { type: String, required: true },
     resetKey: { type: Number, required: true }
   },
   emits: ["create"],
   data() {
     return {
+      source: "upload",
       file: null,
+      distributionId: "",
       software: [],
       customSoftware: ""
     };
   },
+  computed: {
+    selectedDistribution() {
+      return this.distributions.find((d) => d.id === this.distributionId) || null;
+    },
+    submitDisabled() {
+      if (this.busy) return true;
+      if (this.source === "upload") return !this.file;
+      return !this.distributionId;
+    }
+  },
   watch: {
     resetKey() {
+      this.source = "upload";
       this.file = null;
+      this.distributionId = "";
       this.software = [];
       this.customSoftware = "";
     }
@@ -63,8 +102,24 @@ export default {
       this.file = next;
     },
     submit() {
-      if (!this.file) return;
-      this.$emit("create", { file: this.file, software: this.software, customSoftware: this.customSoftware });
+      if (this.source === "upload") {
+        if (!this.file) return;
+        this.$emit("create", {
+          mode: "upload",
+          file: this.file,
+          software: this.software,
+          customSoftware: this.customSoftware
+        });
+        return;
+      }
+
+      if (!this.distributionId) return;
+      this.$emit("create", {
+        mode: "distribution",
+        distributionId: this.distributionId,
+        software: this.software,
+        customSoftware: this.customSoftware
+      });
     }
   }
 };
@@ -92,6 +147,15 @@ h2 {
 
 .input {
   width: 100%;
+}
+
+.select {
+  width: 100%;
+  padding: 10px 10px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
 }
 
 .row {

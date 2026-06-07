@@ -12,13 +12,39 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Optional
+from urllib.error import URLError
 from urllib.parse import parse_qs, urlparse
+from urllib.request import Request, urlopen
 
 
 REPO_ROOT = Path(__file__).resolve().parent
 DATA_DIR = REPO_ROOT / "data"
 UPLOADS_DIR = DATA_DIR / "uploads"
 UPLOADS_INDEX_PATH = DATA_DIR / "uploads.json"
+
+DISTRO_CATALOG = [
+    {
+        "id": "ubuntu-24.04-desktop-amd64",
+        "name": "Ubuntu Desktop",
+        "version": "24.04 LTS",
+        "arch": "amd64",
+        "iso_url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-desktop-amd64.iso",
+    },
+    {
+        "id": "ubuntu-24.04-live-server-amd64",
+        "name": "Ubuntu Server",
+        "version": "24.04 LTS",
+        "arch": "amd64",
+        "iso_url": "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso",
+    },
+    {
+        "id": "debian-12.11-amd64-netinst",
+        "name": "Debian",
+        "version": "12.11",
+        "arch": "amd64",
+        "iso_url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.11.0-amd64-netinst.iso",
+    },
+]
 
 
 DEFAULT_SOFTWARE = [
@@ -355,6 +381,10 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
             self.send_json(HTTPStatus.OK, {"default_software": DEFAULT_SOFTWARE})
             return
 
+        if path == "/api/distributions":
+            self.send_json(HTTPStatus.OK, {"distributions": DISTRO_CATALOG})
+            return
+
         if path == "/api/stats":
             index = load_index()
             uploads = index.get("uploads", {})
@@ -611,6 +641,72 @@ class IsoTailorHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         path = parsed.path
+
+        if path == "/api/uploads/from-distribution":
+            body = self.read_json_body()
+            if body is None:
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "expected_json"})
+                return
+
+            distribution_id = body.get("distribution_id", "")
+            if not isinstance(distribution_id, str) or not distribution_id.strip():
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_distribution_id"})
+                return
+            distro = get_distribution(distribution_id.strip())
+            if not distro:
+                self.send_json(HTTPStatus.NOT_FOUND, {"error": "distribution_not_found"})
+                return
+
+            software_list = body.get("software", [])
+            custom_text = body.get("custom_software", "")
+            if isinstance(software_list, str):
+                software_list = [software_list]
+            if not isinstance(software_list, list) or not all(isinstance(s, str) for s in software_list):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_software"})
+                return
+            if not isinstance(custom_text, str):
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": "invalid_custom_software"})
+                return
+
+            ensure_storage()
+            upload_id = uuid.uuid4().hex
+            stored_iso_path = UPLOADS_DIR / f"{upload_id}.iso"
+            iso_url = str(distro.get("iso_url", ""))
+            try:
+                download_iso(iso_url, stored_iso_path)
+            except ValueError as e:
+                try:
+                    if stored_iso_path.exists():
+                        stored_iso_path.unlink()
+                except OSError:
+                    pass
+                self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(e)})
+                return
+
+            original_filename = os.path.basename(urlparse(iso_url).path) or f"{upload_id}.iso"
+            software = normalize_software_list(software_list + parse_custom_software(custom_text))
+
+            index = load_index()
+            uploads = index.setdefault("uploads", {})
+            meta = {
+                "id": upload_id,
+                "original_filename": original_filename,
+                "iso_path": str(stored_iso_path.relative_to(REPO_ROOT)),
+                "created_at": now_iso(),
+                "software": software,
+                "source": {
+                    "type": "distribution",
+                    "distribution_id": distro.get("id"),
+                    "name": distro.get("name"),
+                    "version": distro.get("version"),
+                    "arch": distro.get("arch"),
+                    "iso_url": iso_url,
+                },
+            }
+            uploads[upload_id] = meta
+            save_index(index)
+            self.send_json(HTTPStatus.CREATED, {"upload": meta})
+            return
 
         if path == "/api/uploads":
             content_type = self.headers.get("Content-Type", "")

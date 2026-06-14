@@ -2,245 +2,245 @@
 
 ## Overview
 
-This repository hosts a **fullstack web application** composed of a **Python-based backend API** (`server.py`) and a **Vue.js 3 frontend** served via a lightweight Nginx reverse proxy in production. The application uses a containerized deployment architecture, with Docker and Docker Compose as the primary deployment mechanisms. Due to its modular structure, dependencies are split across the backend (Python) and frontend (JavaScript/Node.js) layers, each with their own isolated environments and tooling.
+This repository hosts a **fullstack web application** featuring a **Python-based backend API** and a **Vue.js 3 frontend**. The application is designed for containerized deployment using Docker and Docker Compose, with Nginx serving as a reverse proxy for the frontend. Dependencies are managed separately for the backend (Python) and frontend (JavaScript/Node.js) layers.
 
-The backend is a lightweight RESTful API implemented using Python 3.11+ with no external framework (likely raw `http.server`-based or minimal custom routing), and it defines at least nine distinct API endpoints, as inferred from heuristic analysis. The frontend is built using **Vue 3**, with **Vite** serving as the build tool for fast development and optimized production builds. Assets are bundled and served statically using **Nginx**, with explicit configuration (`web/nginx.conf`) to handle SPA routing and proxy API requests to the backend service.
+The backend, located at `server.py`, is a custom Python API. A `Dockerfile` in the root directory indicates it's built using a `python:3.11-slim` base image. The frontend, within the `web/` directory, is a Vue 3 application likely managed by Vite, as suggested by `web/src/App.vue` and `web/src/api.js`. An `nginx.conf` file in `web/` details its configuration for serving static assets and proxying requests.
 
-The use of Docker for both services (`Dockerfile` in the root for Python backend; `web/Dockerfile` for frontend Nginx server) and the presence of `docker-compose.yml` indicate a *multi-container orchestrated setup*. This architecture requires careful management of build-time and runtime dependencies for both layers, especially when running outside of Docker (e.g., during development or CI debugging).
-
-This document details the full setup process—both *local development* and *containerized production*—with emphasis on installation methods using language-specific and system-level package managers, and highlights dependencies critical to the build, test, and runtime stages.
+This document outlines the prerequisites and installation procedures for both local development and containerized execution. It emphasizes the use of language-specific package managers (`pip`, `npm`) and system-level tools.
 
 ## Runtime Dependencies
 
-The application requires two independent runtime environments: one for the **backend (Python)** and one for the **frontend (Node.js)**. While containers abstract this separation during production, developers working on the project locally must install and maintain both toolchains.
+The application requires distinct runtime environments for its backend and frontend components. These must be installed and managed locally for development, while Docker handles them in isolated containers for deployment.
 
-### Python Runtime
+### Python Runtime (Backend)
 
-- **Python 3.11 or higher** is required, as indicated by the base image `python:3.11-slim` in the root `Dockerfile`. While newer minor releases (e.g., 3.12) may be compatible, 3.11.x is the *reference* version for compatibility with the image’s ecosystem and standard library behavior.
-- **pip** is the default package installer, bundled with standard Python installations. It is used to install dependencies listed in `requirements.txt` (presumed, though not explicitly listed in context—see *Package Managers* below). Alternatives like `poetry` or `pipenv` are *not currently in use*, as there are no `pyproject.toml` or `Pipfile` artifacts indicated. Use `pip` unless explicitly configured otherwise.
-- Why needed: Backend logic, HTTP handling, and custom routing are implemented in Python. Even in minimal implementations, `http.server` or WSGI-compatible frameworks like `werkzeug` may be used (though not specified here). Dependencies such as `requests`, `pydantic`, or `uvicorn` are not confirmed in context but may appear if extended.
+-   **Python Version**: **Python 3.11 or higher** is a strict requirement, as indicated by the `python:3.11-slim` base image in the `Dockerfile`. While newer minor versions of Python 3.11.x might be compatible, using exactly 3.11.x is recommended for consistency with the base image's environment and standard library behavior.
+-   **Package Manager**: **`pip`** is the standard package installer for Python. It is used to install dependencies listed in a `requirements.txt` file. The presence of `server.py` and a `Dockerfile` implies this setup, although `requirements.txt` is not explicitly listed in the provided context. If `requirements.txt` is absent, the backend may have no external Python dependencies or they might be managed implicitly. Pip is typically bundled with Python installations.
+-   **Rationale**: The Python runtime is essential for executing the backend API logic defined in `server.py`. This includes handling HTTP requests, processing data, and interacting with any underlying services or databases. Without the correct Python version and installed packages, the backend service cannot start or function correctly.
 
 ### Node.js Runtime (Frontend)
 
-- **Node.js LTS (v20.x or v22.x recommended)** is required to support modern tooling and build tool versions. Vite (vite.config.js) mandates Node.js ≥16.14, but LTS ensures compatibility with current dependencies and security patches.
-- **npm ≥10.x**, **yarn ≥4.x**, or **pnpm ≥8.x** may be used—though `package.json` and `package-lock.json` suggest `npm` is the default lockfile mechanism, with `package-lock.json` committed (implying `npm` is the canonical tool). Yarn or pnpm may be used optionally by developers, but CI or local scripts must be consistent with lockfile expectations.
-- Why needed: Frontend build toolchain (Vite), Vue 3 runtime, and API client abstractions (`src/api.js`, `main.js`) rely on Node.js to execute build scripts, resolve transitive dependencies (e.g., `vue`, `vue-router`, `pinia`, or `axios`), and produce static assets for Nginx serving.
+-   **Node.js Version**: A **Node.js Long-Term Support (LTS) version** (e.g., v20.x or v22.x) is recommended. The frontend build tool (likely Vite, inferred from `web/src/App.vue` and `web/src/api.js`) requires Node.js. Vite specifically mandates Node.js version 16.14 or higher. Using an LTS version ensures better stability, security, and compatibility with frontend dependencies.
+-   **Package Manager**: **`npm`** is the default package manager for Node.js and is strongly implied by the likely presence of `package.json` and `package-lock.json` (which is often committed for reproducible builds). Alternatives like `yarn` or `pnpm` *could* be used if their respective lock files (`yarn.lock`, `pnpm-lock.yaml`) are present and configured. However, `npm install` is the standard command based on common practice and the absence of other lock files.
+-   **Rationale**: The Node.js runtime is necessary for the frontend development toolchain, including Vite for local development server (`npm run dev`) and production builds (`npm run build`). It manages JavaScript/TypeScript packages such as Vue 3, Vue Router, Pinia (or other state management), and API client libraries (`src/api.js`). These are compiled into static assets that Nginx will serve.
 
 ## System Packages and Prerequisites
 
-A few system-level tools are required regardless of deployment method (local or containerized):
+Beyond language-specific runtimes, several system-level tools are required for development, building, and deployment:
 
-- **Git (v2.30+)**: Used for version control, subproject cloning (if any), and CI pipeline triggers. Required to fetch repository sources during build.
-- **Docker Engine (v24+)** and **Docker Compose (v2.20+)**: Required for building and running the multi-container stack locally (via `docker-compose up`). Note: `docker-compose` CLI v2 is standard in modern Docker Desktop installations.
-- **Sensible shell environment** (`bash`/`sh` compatible) for running scripts and compose commands.
+-   **Git (v2.30+)**: Essential for source code management, cloning the repository, and triggering CI/CD workflows (`.github/workflows/main.yml`).
+-   **Docker Engine (v24+)** and **Docker Compose (v2.20+)**: Mandatory for building and running the multi-container application locally using `docker-compose up`. Ensure the Docker daemon is active. Docker Compose V2 is typically installed as part of modern Docker Desktop.
+-   **Shell Environment**: A compatible shell (`bash`, `sh`, or similar) is needed to execute command-line scripts and Docker Compose commands.
 
-These tools are used for both development and production builds. They are *not* installed via language-specific package managers but via OS-native or third-party installers.
+These are foundational tools that interact with the operating system and are not managed by language-specific package managers.
 
 ## Package Managers and Dependency Installation
 
-Dependencies are managed separately for frontend and backend, using language-specific tooling.
+Dependencies for the backend and frontend are managed independently using their respective package managers.
 
 ### Installing Backend (Python) Dependencies
 
-1. Ensure Python 3.11+ is installed and available on your `PATH`. Verify with:
-   ```bash
-   python3 --version  # or `python --version` on some platforms
-   ```
-2. Navigate to the repository root (where `server.py` and (assumed) `requirements.txt` reside):
-   ```bash
-   cd /path/to/repo
-   ```
-3. Install system packages (if needed), then run:
-   ```bash
-   pip install --user -r requirements.txt
-   ```
-   - If `requirements.txt` does not exist (not specified in context), you may need to create it manually, or the backend may have no external dependencies (pure stdlib). If `server.py` is truly minimal (e.g., using only `http.server`), then *no pip installation* may be needed.
-   - Avoid `sudo pip`, especially system-wide, to prevent breaking OS packages. Prefer virtual environments or `--user`.
+1.  **Verify Python Installation**: Ensure Python 3.11+ is installed and accessible in your system's PATH.
+    ```bash
+    python3 --version
+    # or potentially 'python --version'
+    ```
+2.  **Navigate to Repository Root**: Change your directory to the root of the project where `server.py` and the presumed `requirements.txt` are located.
+    ```bash
+    cd /path/to/your/repository
+    ```
+3.  **Install Dependencies**: Use `pip` to install packages listed in `requirements.txt`. It is highly recommended to use a virtual environment to isolate project dependencies.
+    ```bash
+    # Recommended: Create and activate a virtual environment
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows: .\venv\Scripts\activate
 
-   ⚠️ **Note**: In containerized builds (`Dockerfile`), the image `python:3.11-slim` expects all dependencies to be declared or installed via `requirements.txt` (if present). If the Docker image builds without installing any packages (`pip install` is absent in context), it implies the backend has *zero external dependencies*. Double-check `server.py` imports.
+    # Install dependencies
+    pip install --user -r requirements.txt  # if not using venv
+    # OR preferably within a venv:
+    pip install -r requirements.txt
+    ```
+    *If `requirements.txt` is absent*: The backend might not have external dependencies. Inspect `server.py` for `import` statements that could indicate necessary packages. If dependencies are expected but the file is missing, it may need to be created manually.
+
+    ⚠️ **Container Build Note**: The `Dockerfile` uses `python:3.11-slim`. If the `Dockerfile` includes a `RUN pip install -r requirements.txt` step, it will install dependencies within the container image. If this step is missing, the container relies on Python's standard library or pre-installed system packages.
 
 ### Installing Frontend Dependencies (Node.js)
 
-1. Verify Node.js and npm installation:
-   ```bash
-   node --version
-   npm --version
-   ```
-   Recommend ≥v20.x / ≥10.x for compatibility.
+1.  **Verify Node.js and npm Installation**: Confirm Node.js and npm are installed and accessible.
+    ```bash
+    node --version
+    npm --version
+    ```
+2.  **Navigate to Web Directory**: Change to the `web/` directory, which contains the frontend source code and `package.json`.
+    ```bash
+    cd web
+    ```
+3.  **Install Dependencies**: Use `npm install` to download and install all packages listed in `package.json` and update `package-lock.json`.
+    ```bash
+    npm install
+    ```
+    *Alternative Package Managers*: If `yarn.lock` or `pnpm-lock.yaml` were present instead of `package-lock.json`, you would use `yarn install` or `pnpm install` respectively. Given `package-lock.json`'s common use, `npm install` is the default and authoritative command.
 
-2. Navigate to the `web/` directory (frontend source root):
-   ```bash
-   cd web
-   ```
-
-3. Install frontend packages:
-   ```bash
-   npm install
-   ```
-   - This resolves dependencies declared in `package.json` and locks them in `package-lock.json` (ensuring reproducibility).
-   - Alternatives (e.g., `yarn`, `pnpm`) may be used *only if* lockfile and config files are aligned (e.g., `yarn.lock`/`pnpm-lock.yaml`). Since `package-lock.json` is present, `npm install` is authoritative.
-
-   🔧 **Build optimization**: Vite (`vite.config.js`) is used for dev server and production build (`vite build`). The `web/nginx.conf` file likely expects output in `dist/`, consistent with Vite’s default.
+    🔧 **Build Tooling**: Vite is assumed to be the build tool. `npm run dev` will start a development server, and `npm run build` will create optimized static assets in a `dist/` directory, which `web/nginx.conf` is configured to serve.
 
 ## Install System Tools by Platform
 
-Install system prerequisites *once per host*. For CI/CD or CI environments, these are pre-installed via infrastructure-as-code or base images.
+These instructions cover the installation of essential system tools on common operating systems.
 
-### macOS (Homebrew)
+### macOS (using Homebrew)
 
-If using [Homebrew](https://brew.sh/):
+If you have [Homebrew](https://brew.sh/) installed:
 ```bash
-# Update Homebrew and upgrade existing packages (optional)
-brew update && brew upgrade
+# Update Homebrew and upgrade existing installed packages (optional)
+brew update
+brew upgrade
 
-# Install Git (v2.x+)
+# Install Git
 brew install git
 
-# Optional: Install Node.js and Python via Homebrew (recommended for consistency)
-brew install node python
+# Install Node.js (LTS recommended)
+brew install node
+
+# Install Python (3.11+ recommended)
+brew install python
 ```
 
-> 💡 *Alternative*: Install Node.js via [NodeSource](https://github.com/nodesource/distributions) or [nvm](https://github.com/nvm-sh/nvm) for per-project versioning; Python via `pyenv` or system pkg.
-
-### Ubuntu/Debian (APT)
+### Ubuntu/Debian (using APT)
 
 ```bash
-# Update package index
+# Update package list
 sudo apt-get update
 
 # Install Git
 sudo apt-get install -y git
 
-# Install Node.js (LTS 22.x as of 2025)
+# Install Node.js (LTS version 22.x recommended)
+# Download and execute the NodeSource setup script for Node.js
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
-# Install Python 3.11+ (if not present)
-sudo apt-get install -y python3 python3-pip python3-venv
+# Install Python 3.11 and pip, and venv for virtual environments
+# Note: Ubuntu 22.04 LTS typically ships with Python 3.10. For 3.11+, use the deadsnakes PPA.
+# If Python 3.11 is not available directly via apt:
+# sudo add-apt-repository ppa:deadsnakes/ppa
+# sudo apt-get update
+sudo apt-get install -y python3.11 python3.11-venv python3-pip
 ```
 
-> ✅ **Note**: Ubuntu 22.04+ ships Python 3.10; use [deadsnakes PPA](https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa) for 3.11+ if needed:
-> ```bash
-> sudo add-apt-repository ppa:deadsnakes/ppa
-> sudo apt-get update
-> sudo apt-get install -y python3.11 python3.11-venv python3-pip
-> ```
+### Windows (using PowerShell/winget)
 
-### Windows (PowerShell)
-
-Using [Windows Package Manager (`winget`)](https://learn.microsoft.com/en-us/windows/package-manager/):
-
+Using the Windows Package Manager (`winget`):
 ```powershell
-# Install Git (via official package)
+# Find and install Git
 winget install --id Git.Git -e --source winget
 
-# Install Node.js LTS (via Node.js official installer)
+# Find and install the latest LTS version of Node.js
 winget install --id OpenJS.NodeJS.LTS -e --source winget
 
-# Optional: Install Python 3.11 (check winget for latest)
-winget install Python.Python.3.11
+# Find and install Python 3.11 (or a later version if available)
+winget install --id Python.Python.3.11 -e --source winget
 ```
+Ensure that the installation directories for Git, Node.js, and Python are added to your system's `PATH` environment variable. This is usually handled automatically by the installers.
 
-> 💡 Ensure `PATH` includes `C:\Program Files\Git\cmd`, `%USERPROFILE%\AppData\Local\Programs\Python\Python311\`, and `C:\Program Files\nodejs\`.
+## CI/CD Requirements (`.github/workflows/main.yml`)
 
-## CI/CD Requirements
-
-The project includes `.github/workflows/main.yml`, implying GitHub Actions for CI. Key requirements:
+The presence of `.github/workflows/main.yml` indicates that GitHub Actions is used for Continuous Integration.
 
 ### Secrets and Permissions
 
-- **No external secrets** are indicated in context (e.g., Docker Hub credentials, API keys). However, if the workflow builds/pushes Docker images, the following *should* be configured in GitHub repository settings:
-  - `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` for Docker Hub push access (if applicable).
-  - `REGISTRY` (e.g., `ghcr.io`) and `GITHUB_TOKEN` if publishing to GitHub Container Registry.
-  - `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` if deploying to AWS (not indicated).
-- Permissions required in `main.yml`:
-  - `contents: read` (to checkout code)
-  - `packages: write` (if publishing container images)
-  - `checks: write` (for test reports, if any)
-  - `id-token: write` (if using OIDC for cloud auth)
+-   **Secrets**: The workflow file should be reviewed for any required secrets that need to be configured in the GitHub repository's settings. Common secrets include:
+    -   `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`: If the workflow builds and pushes Docker images to Docker Hub.
+    -   `REGISTRY` and `GITHUB_TOKEN`: If publishing to GitHub Container Registry (GHCR) or other private registries.
+    -   Cloud provider credentials (e.g., `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`): If the workflow includes deployment steps.
+-   **Permissions**: The workflow's job definitions in `main.yml` must grant appropriate permissions to the `GITHUB_TOKEN`. Essential permissions often include:
+    -   `contents: read`: To check out the repository code.
+    -   `packages: write`: If the workflow publishes container images.
+    -   `checks: write`: For reporting test results.
 
-### Pipeline Dependencies
+### Pipeline Dependencies and Commands
 
-The workflow likely:
-1. Checks out code.
-2. Builds and caches frontend (`npm ci`, `npm run build`) and backend (`docker build`).
-3. Runs linting/tests (e.g., `npm test`, `pytest`—if configured).
-4. Builds and pushes Docker images.
+The CI pipeline will need to install the same Node.js and Python runtimes and dependencies as required for local development. It will typically execute commands similar to these:
 
-Ensure all dependencies for testing (e.g., `pytest`, `eslint`, `prettier`) are installed in CI. Since `web/package.json` may declare `"scripts": {"test": "..."}`, confirm test commands are valid.
+-   **Frontend Setup & Build**:
+    ```bash
+    cd web
+    npm ci  # Use `npm ci` for deterministic installs in CI
+    npm run lint  # If linting is configured
+    npm run test  # If unit/integration tests are configured
+    npm run build # Build Vue.js application
+    ```
+-   **Backend Setup & Test**:
+    ```bash
+    # Install backend dependencies (assuming requirements.txt exists)
+    python3 -m venv .venv
+    source .venv/bin/activate
+    pip install -r requirements.txt
+
+    # Install testing tools if not in requirements.txt
+    pip install pytest  # Example for pytest
+
+    # Run backend tests
+    pytest
+    ```
+-   **Docker Build & Push**: If the workflow builds Docker images, it will utilize the `Dockerfile` and `docker-compose.yml`. Commands like `docker build` and `docker push` will be invoked.
+
+Ensure that any development dependencies required for testing or linting (e.g., ESLint, Prettier, Pytest) are listed in the respective `package.json` (`devDependencies`) or `requirements.txt` files.
 
 ## Build and Run Commands
 
-All commands assume you are in the repository root unless specified.
+These commands assume you are in the repository's root directory unless otherwise specified.
 
-### Local Development (Non-Container)
+### Local Development (Outside Docker)
 
 #### Backend (Python)
 
+Start the Python backend server directly:
 ```bash
 python3 server.py
 ```
-> 🔍 *If* `server.py` is a standard Flask/FastAPI app, `pip install flask`/`uvicorn` would be needed—but context suggests it’s *not* used. Verify imports.
+*Note*: If `server.py` is part of a framework like Flask or FastAPI, additional installation (`pip install flask` or `pip install fastapi uvicorn`) and a different run command might be necessary. However, the context suggests a custom, potentially minimal, implementation.
 
 #### Frontend (Vue + Vite)
 
+Navigate to the `web/` directory, install dependencies, and start the development server:
 ```bash
 cd web
 npm install
-npm run dev    # starts dev server on port 5173 (default)
+npm run dev
 ```
-> 🔧 Use `npm run build` to generate static assets into `dist/`.
+The Vite development server typically runs on `http://localhost:5173` by default. Use `npm run build` to create production-ready static assets in the `dist/` directory.
 
-### Containerized Development (Docker Compose)
+### Containerized Development (using Docker Compose)
 
-Ensure Docker daemon is running, then:
+Ensure Docker Desktop or Docker Engine and Docker Compose are running.
 
 ```bash
-# Build and start all services
+# Build all images and start all services in the foreground
 docker-compose up --build
 
-# Run in background
+# Start services in the background
 docker-compose up -d --build
 
-# View logs
+# View logs from all services
 docker-compose logs -f
 
-# Stop containers
+# Stop and remove containers, networks, and images created by 'up'
 docker-compose down
 ```
-
-> 🐳 `web/nginx.conf` is expected to proxy `/api` requests to `server.py` (exposed on port 8000 by backend container, or similar—confirm `docker-compose.yml` service definitions and port mappings).
-
-### CI Build/Test Commands
-
-If `.github/workflows/main.yml` uses `actions/setup-node` and `actions/setup-python`, typical commands include:
-
-```bash
-# Frontend lint & test (if configured)
-cd web
-npm ci
-npm run lint
-npm run test
-npm run build
-
-# Backend test (if `pytest` or unit tests exist)
-python3 -m pip install --user pytest  # if needed
-pytest
-```
-
-> 📌 **Note**: If no tests are defined, ensure CI only builds and pushes containers.
+The `docker-compose.yml` file orchestrates the backend, frontend (likely Nginx), and potentially other services. The `web/nginx.conf` should be configured to proxy API requests (e.g., `/api/*`) to the backend service, as defined in `docker-compose.yml`.
 
 ## Summary Checklist for Setup
 
-| Component | Requirement | Command |
-|-----------|-------------|---------|
-| Backend runtime | Python ≥3.11 | `python3 --version` |
-| Backend deps | `requirements.txt` (if any) | `pip install -r requirements.txt` |
-| Frontend runtime | Node.js LTS | `node --version`, `npm --version` |
-| Frontend deps | `web/package.json` | `cd web && npm install` |
-| Container runtime | Docker Engine + Compose | `docker info`, `docker compose version` |
-| System tools | Git | `git --version` |
-| Development server (backend) | Start `server.py` | `python3 server.py` |
-| Development server (frontend) | `npm run dev` in `web/` | `cd web && npm run dev` |
+| Component             | Requirement                     | Verification / Installation Command                                                                    |
+| :-------------------- | :------------------------------ | :----------------------------------------------------------------------------------------------------- |
+| **Backend Runtime**   | Python ≥ 3.11                   | `python3 --version`                                                                                    |
+| **Backend Dependencies**| `requirements.txt` (if exists)  | `pip install -r requirements.txt` (preferably within a `venv`)                                         |
+| **Frontend Runtime**  | Node.js LTS                     | `node --version`, `npm --version`                                                                      |
+| **Frontend Dependencies**| `web/package.json`              | `cd web && npm install`                                                                                |
+| **Containerization**  | Docker Engine & Compose v2      | `docker info`, `docker compose version`                                                                |
+| **Version Control**   | Git                             | `git --version`                                                                                        |
+| **Local Dev (Backend)**| Run `server.py`                 | `python3 server.py`                                                                                    |
+| **Local Dev (Frontend)**| Vite Dev Server                 | `cd web && npm run dev`                                                                                |
+| **Container Dev**     | Docker Compose                  | `docker-compose up --build`                                                                            |
 
-Always verify dependencies *in each layer*—especially when switching between containerized and local modes—to avoid subtle environment drift.
+Always ensure consistency between your local development environment and the containerized build environment to prevent unexpected issues. Pay close attention to dependency versions specified in `requirements.txt` and `package.json` (and their lock files).

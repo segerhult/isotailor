@@ -17,6 +17,13 @@ paths:
       responses:
         '200':
           description: OK
+  /api/routes:
+    get:
+      summary: GET /api/routes
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
   /api/uploads:
     get:
       summary: GET /api/uploads
@@ -26,6 +33,13 @@ paths:
           description: OK
     post:
       summary: POST /api/uploads
+      description: Source: web/src/api.js
+      responses:
+        '200':
+          description: OK
+  /api/uploads/search${qs:
+    get:
+      summary: GET /api/uploads/search${qs
       description: Source: web/src/api.js
       responses:
         '200':

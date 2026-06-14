@@ -2,135 +2,142 @@
 
 ## Overview
 
-This repository hosts a fullstack web application composed of a Python-based backend API server and a JavaScript/TypeScript frontend built with Vue 3, Vite, and modern web tooling. The backend is implemented using Python's built-in `http.server` module, providing a lightweight, self-contained REST-like API with support for file uploads, software package manifest generation, and custom install instructions for Debian-based systems. The frontend is a client-side single-page application (SPA) served via Nginx and optimized for production with static asset handling, API abstraction, and responsive design patterns.
+This repository houses a full-stack web application. The architecture is characterized by a Python-based backend API server and a JavaScript/TypeScript frontend built using Vue 3 and Vite. The backend, implemented with Python's standard `http.server` module, offers a lightweight, self-contained REST-like API. It handles functionalities such as file uploads, generation of software package manifests, and the creation of custom installation instructions tailored for Debian-based systems. The frontend is a Single Page Application (SPA) served via Nginx, optimized for production with efficient static asset management, an abstracted API client, and adherence to responsive design principles.
 
-The architecture follows a clean separation of concerns: the backend exposes a minimal but extensible HTTP API with explicit security considerations (e.g., HTML sanitization, path traversal protection), while the frontend communicates with it over HTTP using structured requests. Persistent storage is file-based, using a JSON index (`uploads.json`) and a dedicated `data/uploads/` directory—ideal for lightweight, local deployments without external databases.
+A clear separation of concerns is maintained throughout the architecture. The backend exposes a minimal yet extensible HTTP API, incorporating explicit security measures like HTML sanitization and protection against path traversal vulnerabilities. The frontend communicates with this API over HTTP using structured requests. Data persistence is achieved through a file-based system, utilizing a JSON index (`uploads.json`) and a dedicated directory for uploads (`data/uploads/`), which is well-suited for lightweight, local deployments without reliance on external database systems.
 
-The project is containerized using Docker and orchestrated via Docker Compose, enabling reproducible local development and consistent deployments across environments. A CI/CD pipeline defined in GitHub Actions ensures automated testing, linting, and image building.
+Containerization is achieved using Docker, with orchestration managed by Docker Compose. This ensures reproducible local development environments and consistent deployments across various environments. A Continuous Integration and Continuous Deployment (CI/CD) pipeline, configured in GitHub Actions (`.github/workflows/main.yml`), automates testing, linting, and the building of container images.
 
 ---
 
 ## Frontend
 
-The frontend is built using Vue 3 (via the Composition API), Vite as the build tool, and Nginx as the production web server. It resides in the `web/` directory and includes:
+The frontend is developed using Vue 3, leveraging the Composition API. Vite serves as the build tool, and Nginx is employed as the production web server. The frontend codebase is located within the `web/` directory and includes the following key components:
 
-- **Entry point**: `web/src/main.js` initializes the Vue app.
-- **Root component**: `web/src/App.vue` provides layout structure and navigation.
-- **API integration**: `web/src/api.js` abstracts RESTful communication with the backend, including upload and manifest retrieval endpoints.
-- **Static assets & configuration**: `web/index.html`, `web/vite.config.js`, `web/nginx.conf`, and `web/.dockerignore` coordinate the bundling, local serving, and production deployment via Nginx.
+-   **Entry Point**: `web/src/main.js` is responsible for initializing the Vue application.
+-   **Root Component**: `web/src/App.vue` structures the overall layout and navigation of the application.
+-   **API Integration**: `web/src/api.js` provides an abstraction layer for RESTful communication with the backend API. This includes handling requests for file uploads and retrieving software manifest data.
+-   **Static Assets and Configuration**: Files such as `web/index.html` (the main HTML entry point), `web/vite.config.js` (Vite build configuration), `web/nginx.conf` (Nginx server configuration for production), and `web/.dockerignore` (files to exclude from the frontend Docker image) collectively manage the bundling process, local development serving, and production deployment via Nginx.
 
-The frontend is decoupled from the backend, using relative API paths (`/api/...`) for service discovery—allowing flexibility in deployment (e.g., local dev server, CDN, reverse proxy). It does not rely on external CDNs or heavy UI frameworks, maintaining a minimal, secure, and performant codebase.
+The frontend is designed to be decoupled from the backend, utilizing relative API paths (e.g., `/api/...`) for service discovery. This design choice enhances flexibility in deployment scenarios, allowing for integration with development servers, Content Delivery Networks (CDNs), or reverse proxies. The frontend avoids reliance on heavy external UI frameworks or CDNs, thereby maintaining a minimal, secure, and performant codebase.
 
 ---
 
 ## Backend
 
-The backend is a Python 3.11-based HTTP server (`server.py`) implementing a custom REST-like API without external dependencies like Flask or FastAPI. It leverages Python’s standard library (`http.server`, `json`, `pathlib`) to serve endpoints dynamically. Key design principles include:
+The backend is implemented as a Python 3.11 HTTP server (`server.py`) which exposes a custom REST-like API. It notably avoids external web framework dependencies like Flask or FastAPI, relying instead on Python's standard library modules such as `http.server`, `json`, and `pathlib`. The server is designed to handle concurrent requests efficiently through the use of `ThreadingHTTPServer`.
 
-- **Thread-safety**: Uses `ThreadingHTTPServer` to handle concurrent requests efficiently.
-- **Security**: Sanitizes user input using `html.escape`, restricts file upload paths via `Path.resolve()`, and prevents path traversal attacks.
-- **State persistence**: Maintains an `uploads.json` index to track uploaded files and metadata, including timestamps and software manifest generation history.
+Key architectural and security considerations include:
 
-### Endpoints (9 total)
+-   **Thread Safety**: Utilizes `ThreadingHTTPServer` to manage concurrent client requests effectively.
+-   **Security**: Implements input sanitization using `html.escape` to prevent cross-site scripting (XSS) attacks. File upload paths are validated and restricted using `Path.resolve()` to prevent directory traversal exploits.
+-   **State Persistence**: Manages application state by storing an index of uploaded files and metadata in `data/uploads.json`. This includes timestamps and history of software manifest generation.
 
-1. `GET /api/status` – Returns health check and runtime metadata (Python version, uptime).
-2. `GET /api/manifest` – Generates an install manifest (with Debian/Ubuntu `apt` examples) for a list of requested packages.
-3. `POST /api/manifest` – Accepts a JSON payload with `software` field to generate custom install manifests.
-4. `GET /api/uploads` – Lists all uploaded files.
-5. `POST /api/upload` – Accepts multipart/form-data file uploads, stores them in `data/uploads/`, and indexes metadata.
-6. `GET /api/upload/:id` – Retrieves metadata and download link for a specific upload by ID.
-7. `DELETE /api/upload/:id` – Removes a file and its index entry (idempotent).
-8. `GET /api/defaults` – Returns the default list of software packages (e.g., `curl`, `vim`, `git`).
-9. `GET /` – Serves the SPA’s `index.html` (fallback for frontend routes).
+### API Endpoints (Heuristic count: 11)
 
-All endpoints follow consistent patterns: JSON responses for API requests, HTML fallback for root routing, and explicit HTTP status codes (`200 OK`, `201 Created`, `400 Bad Request`, `404 Not Found`, `500 Internal Server Error`).
+The backend exposes the following API endpoints:
+
+1.  `GET /api/status`: Provides health check information and runtime metadata, such as the Python version and server uptime.
+2.  `GET /api/manifest`: Generates an installation manifest, including example commands for Debian/Ubuntu systems using `apt`, based on a list of specified software packages.
+3.  `POST /api/manifest`: Accepts a JSON payload containing a `software` field to generate customized installation manifests.
+4.  `GET /api/uploads`: Lists all files that have been uploaded and indexed.
+5.  `POST /api/upload`: Handles multipart/form-data file uploads. Uploaded files are stored in the `data/uploads/` directory, and their metadata is recorded in the index.
+6.  `GET /api/upload/<id>`: Retrieves the metadata and a download link for a specific uploaded file, identified by its unique ID.
+7.  `DELETE /api/upload/<id>`: Deletes a specific uploaded file and its corresponding entry from the index. This operation is designed to be idempotent.
+8.  `GET /api/defaults`: Returns a predefined list of default software packages considered essential or commonly used (e.g., `curl`, `vim`, `git`).
+9.  `GET /`: Serves the `index.html` file of the SPA. This acts as a fallback route, particularly for handling client-side routing in the frontend application.
+
+All API endpoints are designed to return JSON responses for API-specific requests. The root route (`GET /`) provides an HTML fallback. Explicit HTTP status codes are used consistently to indicate the outcome of requests (e.g., `200 OK`, `201 Created`, `400 Bad Request`, `404 Not Found`, `500 Internal Server Error`).
 
 ### Storage
 
-Data is stored locally:
-- **`data/`**: Root for persistent state.
-- **`data/uploads/`**: Binary file storage directory (non-privileged, isolated).
-- **`data/uploads.json`**: JSON index mapping upload IDs to file metadata (path, name, timestamp, original MIME-like hints).
+Data is managed locally within the file system:
 
-Storage is designed for simplicity and portability, avoiding database dependencies—suitable for development, edge cases, or low-volume deployments. Production use may require migration to persistent volumes or external object storage.
+-   **`data/`**: The root directory for all persistent application data.
+-   **`data/uploads/`**: This directory stores the actual binary files that have been uploaded via the API. It is designed to be isolated and does not require elevated privileges.
+-   **`data/uploads.json`**: A JSON file that serves as an index, mapping unique upload IDs to their associated metadata. This metadata includes the file path, original filename, timestamp, and any detected MIME-type hints.
+
+This storage strategy prioritizes simplicity and portability, eliminating the need for external database dependencies. It is suitable for development, edge cases, or low-volume deployments. For production environments requiring higher throughput or scalability, a migration to persistent volumes or external object storage solutions (e.g., AWS S3, Google Cloud Storage, MinIO) would be necessary.
 
 ---
 
 ## Containers
 
-The project uses a multi-stage Docker setup for the backend and frontend services.
+The project utilizes a multi-stage Docker setup to build and deploy both the backend and frontend services.
 
 ### Backend Container (`Dockerfile`)
 
-- **Base image**: `python:3.11-slim`
-- **Build context**: Root (`.`) with minimal layers (`COPY server.py data/` only if needed).
-- **Runtime**: Uses Python’s built-in `http.server` module; no additional system packages are pre-installed beyond the slim image.
-- **Volume mapping**: `data/` should be mounted as a volume for persistence across restarts.
+-   **Base Image**: Built upon `python:3.11-slim`, providing a minimal Python 3.11 environment.
+-   **Build Context**: The Dockerfile operates from the repository root. Only necessary files are copied into the image to minimize layer size and build time.
+-   **Runtime**: The application runs using Python’s built-in `http.server` module. No additional system packages are pre-installed beyond what is included in the slim base image.
+-   **Data Persistence**: The `data/` directory, which holds uploads and the index file, is intended to be mounted as a Docker volume. This ensures that data is preserved across container restarts and updates.
 
 ### Frontend Container (`web/Dockerfile`)
 
-- **Build stage**: Uses Node.js base image to run `npm install` and `vite build`, producing optimized static assets in `dist/`.
-- **Production stage**: Uses `nginx:alpine` to serve built assets and handle HTTP/2, compression, and error pages (configured via `web/nginx.conf`).
-- **Entrypoint**: Nginx starts on port `80`, serving `dist/`.
+This Dockerfile employs a multi-stage build process:
+
+-   **Build Stage**: Uses a Node.js base image to install frontend dependencies (`npm install`) and build the Vue application (`vite build`). The output of this stage is the optimized static assets, typically located in the `dist/` directory.
+-   **Production Stage**: This stage uses a lightweight `nginx:alpine` image. It serves the static assets produced in the build stage. The Nginx configuration (`web/nginx.conf`) handles routing, compression (gzip), caching strategies, and serves the `index.html` for the SPA, along with other static files. The container exposes port `80` for incoming HTTP traffic.
 
 ### Orchestration (`docker-compose.yml`)
 
-- Defines two services: `backend` and `frontend`.
-- Backend exposes port `8000`.
-- Frontend depends on backend and exposes port `80`, reverse-proxies `/api` routes to the backend container via Nginx `proxy_pass`.
-- Uses named volumes for `data/` persistence (mounted only in backend service).
+The `docker-compose.yml` file defines and orchestrates the backend and frontend services:
 
-This setup enables local development with `docker-compose up --build`, hot-reload for frontend in dev (via `vite dev` outside Docker), and production-grade deployments using `docker-compose up -d`.
+-   **Services**: It defines two primary services: `backend` and `frontend`.
+-   **Backend Service**: Exposes port `8000` and is configured to mount the `data/` directory as a named volume for persistent storage.
+-   **Frontend Service**: Depends on the `backend` service to ensure it starts after the backend is available. It exposes port `80`. Critically, it configures Nginx (via `web/nginx.conf`) to act as a reverse proxy, forwarding all requests prefixed with `/api` to the `backend` service. Other requests are served as static assets from the built frontend application.
+
+This Docker Compose setup facilitates easy local development using `docker-compose up --build -d`. It also prepares the application for production-like deployments. For local development without Docker, the frontend can be run using `npm run dev`, which leverages Vite's development server and is configured to proxy API requests automatically.
 
 ---
 
 ## CI/CD
 
-GitHub Actions CI pipelines (`\.github\workflows\main.yml`) enforce quality gates:
+The repository includes a GitHub Actions workflow defined in `.github/workflows/main.yml` to automate Continuous Integration and Continuous Deployment (CI/CD) processes. This pipeline enforces code quality, tests application integrity, and manages container image deployment. Key stages include:
 
-- **Linting**: Lints Python (`flake8`/`pylint` heuristic), JavaScript/TypeScript (`eslint`), and YAML (`actionlint`, `docker-compose` schema).
-- **Testing**: Runs unit tests (if present), validates API contracts (via `curl` health checks), and ensures Docker builds succeed.
-- **Security scanning**: Scans Docker images and dependencies for known vulnerabilities (e.g., `trivy`, `npm audit`).
-- **Image publishing**: Pushes container images to a registry (e.g., GitHub Container Registry) on `main` branch merges.
-
-Required secrets (e.g., `REGISTRY_USERNAME`, `REGISTRY_PASSWORD`) are configured in repository settings for publishing.
+-   **Linting**: Automated checks for code quality and style are performed on Python code (e.g., using `flake8` or `pylint` heuristics) and JavaScript/TypeScript code (using `eslint`). Additionally, configuration files like YAML and Docker Compose files are linted.
+-   **Testing**: The pipeline includes steps to run automated tests (if unit tests are implemented). It also validates API contract endpoints, typically using tools like `curl`, to ensure the backend is responding correctly. Successful Docker image builds are also verified.
+-   **Security Scanning**: Vulnerability scanning is performed on container images and project dependencies to identify and report known security issues (e.g., using `trivy` or `npm audit`).
+-   **Image Publishing**: Upon successful completion of the checks on the `main` branch, container images are automatically pushed to a container registry, such as GitHub Container Registry (GHCR). This process requires authentication, typically managed through repository secrets like `REGISTRY_USERNAME` and `REGISTRY_PASSWORD` configured in the GitHub repository settings.
 
 ---
 
 ## Repository Layout
 
+The repository is organized to clearly separate concerns and facilitate development and maintenance.
+
 ```
-├── .github/                    # CI/CD configurations
+├── .github/                    # CI/CD configurations and workflows.
 │   └── workflows/
-│       └── main.yml           # GitHub Actions pipeline
-├── data/                       # Runtime data (generated on first run)
-│   ├── uploads/               # Uploaded files
-│   └── uploads.json           # File metadata index
-├── docs/                       # Documentation
-│   └── openapi.yaml           # OpenAPI 3.0 specification for API
-├── web/                        # Frontend (Vue 3 + Vite)
-│   ├── src/
-│   │   ├── main.js            # App entry point
-│   │   ├── App.vue            # Root component
-│   │   └── api.js             # HTTP client abstraction
-│   ├── dist/                   # Built assets (generated)
-│   ├── nginx.conf              # Nginx server block (routes, gzip, caching)
-│   ├── Dockerfile              # Multi-stage frontend container build
-│   ├── .dockerignore          # Exclude dev files from container
-│   ├── index.html              # HTML entry point
-│   ├── package.json            # NPM dependencies (Vue, Vite, etc.)
-│   ├── package-lock.json       # Lockfile for reproducible builds
-│   └── vite.config.js          # Vite config (Vue plugin, path aliases)
-├── Dockerfile                  # Backend container build
-├── docker-compose.yml          # Service orchestration
-├── server.py                   # Python backend API server
-├── .dockerignore              # Exclude dev artifacts from backend image
-├── .gitignore                 # Git-excluded patterns (e.g., `data/`, `node_modules/`)
-├── README.md                  # Project overview and quickstart
-└── LICENSE                    # Project license (Apache-2.0)
+│       └── main.yml           # GitHub Actions pipeline definition.
+├── data/                       # Runtime data and persistent storage. Generated on first run.
+│   ├── uploads/               # Directory for storing uploaded files.
+│   └── uploads.json           # JSON index mapping upload IDs to file metadata.
+├── docs/                       # Project documentation.
+│   └── openapi.yaml           # OpenAPI 3.0 specification detailing the backend API.
+├── web/                        # Frontend application code.
+│   ├── dist/                   # Production-ready static assets, generated by Vite build.
+│   ├── nginx.conf              # Nginx configuration for serving the frontend and proxying API requests.
+│   ├── Dockerfile              # Multi-stage Dockerfile for building the frontend container.
+│   ├── .dockerignore          # Specifies files/directories to exclude from the frontend Docker build context.
+│   ├── index.html              # The main HTML file, entry point for the SPA.
+│   ├── package.json            # NPM project configuration, listing dependencies (Vue, Vite, etc.).
+│   ├── package-lock.json       # Lockfile ensuring reproducible frontend dependency installations.
+│   ├── vite.config.js          # Vite build tool configuration, including Vue plugin setup and path aliases.
+│   └── src/                    # Source code for the Vue.js application.
+│       ├── App.vue            # The root Vue component.
+│       ├── api.js             # Module for abstracting API communication.
+│       └── main.js            # Vue application entry point.
+├── Dockerfile                  # Dockerfile for building the backend API server container.
+├── docker-compose.yml          # Docker Compose configuration for orchestrating backend and frontend services.
+├── server.py                   # The main Python script for the backend API server.
+├── .dockerignore              # Specifies files/directories to exclude from the backend Docker build context.
+├── .gitignore                 # Git configuration listing files and directories to ignore (e.g., `data/`, `node_modules/`).
+├── README.md                  # Project overview, setup instructions, and general documentation.
+└── LICENSE                    # Project license (e.g., Apache-2.0).
 ```
 
-This layout emphasizes modularity, clarity, and ease of onboarding: the backend and frontend are cleanly separated but co-located for monorepo simplicity, with shared configuration (e.g., `Dockerfile` at root) and minimal coupling.
+This layout promotes modularity and clarity. The backend and frontend are co-located within the same repository for monorepo simplicity, while maintaining a clear separation. Shared configurations, such as Dockerfiles at the root level, are utilized where appropriate.
 
 ---
 
@@ -140,110 +147,125 @@ This layout emphasizes modularity, clarity, and ease of onboarding: the backend 
 graph TD
   subgraph Client
     Browser[Web Browser]
-    Browser -->|HTTP/HTTPS| SPA
   end
 
-  subgraph Frontend
-    SPA[Vue SPA<br/>Nginx reverse-proxy]
-    SPA -->|/api/*| Backend
-    SPA -->|/*| StaticAssets
-    StaticAssets[Nginx static files<br/>`/dist`]
+  subgraph Frontend Service
+    NginxFE[Nginx<br/>(Serves static assets from /dist)]
+    VueApp[Vue SPA<br/>(assets served by Nginx)]
   end
 
-  subgraph Backend
-    Server[Python HTTP Server<br/>`server.py`]
-    Server -->|Read/Write| Index[JSON Index<br/>`data/uploads.json`]
-    Server -->|Store/Retrieve| Uploads[File Storage<br/>`data/uploads/`]
+  subgraph Backend Service
+    PythonServer[Python HTTP Server<br/>(`server.py`)]
+    FileStorage[File Storage<br/>(`data/uploads/`)]
+    JsonIndex[JSON Index<br/>(`data/uploads.json`)]
   end
 
-  subgraph Infrastructure
-    Docker[Multi-stage Docker<br/>+ Docker Compose]
-    Docker --> Frontend
-    Docker --> Backend
+  subgraph Orchestration
+    DockerCompose[Docker Compose]
   end
+
+  Browser -->|HTTP/HTTPS| NginxFE
+  NginxFE -->|Serve Static Assets| VueApp
+  NginxFE -->|Proxy API Requests (/api/*)| PythonServer
+
+  PythonServer -->|Read/Write| FileStorage
+  PythonServer -->|Read/Write| JsonIndex
+
+  DockerCompose --> NginxFE
+  DockerCompose --> PythonServer
 ```
 
-- **Client**: Browser interacting with the SPA and API.
-- **Frontend**: Vue app bundled and served via Nginx with reverse proxy to `/api`.
-- **Backend**: Threaded Python HTTP server with file and metadata storage.
-- **Infrastructure**: Containerized via Docker for portability and consistency.
+-   **Client**: A web browser interacts with the deployed application.
+-   **Frontend Service**: Nginx efficiently serves the static assets of the Vue SPA. It also acts as a reverse proxy, forwarding API requests (`/api/*`) to the backend service.
+-   **Backend Service**: The Python HTTP server (`server.py`) handles API requests, interacting with the file storage (`data/uploads/`) for uploaded files and the JSON index (`data/uploads.json`) for metadata.
+-   **Orchestration**: Docker Compose manages the deployment and networking of the frontend and backend services.
 
 ---
 
 ## Install Requirements
 
-### Prerequisites (for local development without Docker)
+### Prerequisites (for local development outside of Docker)
 
-- **Python ≥ 3.11**  
-  - macOS: `brew install python`  
-  - Ubuntu/Debian: `sudo apt-get install python3.11 python3-pip`  
-  - Windows: Install from [python.org](https://www.python.org/downloads/)
+Before setting up the project locally without Docker, ensure the following software is installed:
 
-- **Node.js ≥ 20 & npm ≥ 10**  
-  - macOS: `brew install node`  
-  - Ubuntu/Debian: `curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs`  
-  - Windows: Download from [nodejs.org](https://nodejs.org/)
+-   **Python ≥ 3.11**:
+    -   **macOS**: Install via Homebrew: `brew install python`
+    -   **Ubuntu/Debian**: Use apt: `sudo apt-get update && sudo apt-get install python3.11 python3-pip`
+    -   **Windows**: Download the installer from the official [Python website](https://www.python.org/downloads/).
 
-- **Docker & Docker Compose** *(recommended for consistency)*  
-  - macOS/Windows: Install Docker Desktop  
-  - Linux (Ubuntu):  
-    ```bash
-    sudo apt-get update && sudo apt-get install docker.io docker-compose-plugin
-    sudo usermod -aG docker $USER  # Re-login for group changes
-    ```
+-   **Node.js ≥ 20 and npm ≥ 10**:
+    -   **macOS**: Install via Homebrew: `brew install node`
+    -   **Ubuntu/Debian**: Use NodeSource repository: `curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - && sudo apt-get install -y nodejs`
+    -   **Windows**: Download the installer from the official [Node.js website](https://nodejs.org/).
+
+-   **Docker & Docker Compose**: *(Highly recommended for a consistent development and deployment experience)*
+    -   **macOS/Windows**: Install [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+    -   **Linux (Ubuntu)**: Install Docker Engine and Docker Compose plugin:
+        ```bash
+        sudo apt-get update && sudo apt-get install docker.io docker-compose-plugin
+        # Add your user to the docker group to run docker commands without sudo
+        sudo usermod -aG docker $USER
+        # You will need to log out and log back in for the group change to take effect.
+        ```
 
 ### Backend Setup (Python)
 
-1. Clone the repository.
-2. Install dependencies (none beyond stdlib—no `requirements.txt` needed).
-3. Run the server:
-   ```bash
-   python server.py --port 8000
-   ```
-   - Optional flags: `--host 0.0.0.0 --port 8000`
-   - First run creates `data/` and `data/uploads/`.
+1.  **Clone the Repository**: Obtain the project code.
+2.  **Install Dependencies**: No external Python package dependencies are required beyond the standard library. Therefore, a `requirements.txt` file is not used.
+3.  **Run the Server**: Execute the backend server script:
+    ```bash
+    python server.py --port 8000
+    ```
+    -   **Optional Flags**: You can specify the host and port: `--host 0.0.0.0 --port 8000`.
+    -   Upon the first run, the server will automatically create the necessary data directories (`data/` and `data/uploads/`).
 
-### Frontend Setup (JavaScript)
+### Frontend Setup (JavaScript/Vue)
 
-1. Navigate to `web/`.
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Run dev server:
-   ```bash
-   npm run dev
-   ```
-   - Accessible at `http://localhost:5173` (Vite default).
-   - Proxy `/api` to `http://localhost:8000` automatically (configured in `vite.config.js`).
-
-4. Build for production:
-   ```bash
-   npm run build
-   ```
-   - Output: `web/dist/`.
+1.  **Navigate to the Frontend Directory**: Change your current directory to `web/`.
+    ```bash
+    cd web/
+    ```
+2.  **Install Dependencies**: Install all necessary Node.js packages using npm:
+    ```bash
+    npm install
+    ```
+3.  **Run Development Server**: Start the Vite development server for live reloading and debugging:
+    ```bash
+    npm run dev
+    ```
+    -   The application will typically be accessible at `http://localhost:5173` (Vite's default).
+    -   The `vite.config.js` is pre-configured to automatically proxy API requests made to `/api` to the backend server at `http://localhost:8000`.
+4.  **Build for Production**: Generate optimized static assets for deployment:
+    ```bash
+    npm run build
+    ```
+    -   The build output will be placed in the `web/dist/` directory.
 
 ### Containerized Setup (Docker Compose)
 
-1. Ensure `docker-compose` is available.
-2. Build and run:
-   ```bash
-   docker-compose up --build -d
-   ```
-   - Backend: `http://localhost:8000`
-   - Frontend (with `/api` proxy): `http://localhost:8000`
-   - Data persists in `./data` (local directory) or named volume.
+This is the recommended method for running the application, ensuring consistency across environments.
+
+1.  **Ensure Docker and Docker Compose are Installed**: Refer to the prerequisites section above.
+2.  **Build and Run Services**: Start both the backend and frontend services using Docker Compose:
+    ```bash
+    docker-compose up --build -d
+    ```
+    -   The backend service will be accessible (internally) and the frontend will be served. The frontend's Nginx will proxy API calls to the backend.
+    -   Access the application via `http://localhost:8000` (or the port mapped in `docker-compose.yml` for the frontend service, typically port 80 mapped to host port 8000 for simplicity in this setup).
+    -   The `data/` directory will be persisted using a named volume defined in `docker-compose.yml`, ensuring data is not lost between container restarts.
 
 ---
 
 ## Future Considerations
 
-- **Scalability**: Replace `data/` storage with object storage (e.g., MinIO, S3) for horizontal scaling.
-- **Auth**: Integrate JWT or OAuth2 for protected endpoints.
-- **Testing**: Add pytest and Vitest test suites.
-- **Observability**: Add structured logging (e.g., `structlog`) and metrics (e.g., Prometheus).
-- **OpenAPI Refinement**: Enhance `docs/openapi.yaml` with request/response schemas, examples, and authentication.
+The current architecture provides a solid foundation. Potential areas for future enhancement include:
 
---- 
+-   **Scalability Enhancement**: Migrate from local file-based storage (`data/`) to scalable object storage solutions like AWS S3, Google Cloud Storage, or a self-hosted MinIO instance. This would improve resilience and horizontal scaling capabilities.
+-   **Authentication and Authorization**: Implement robust security measures by integrating authentication mechanisms, such as JSON Web Tokens (JWT) or OAuth 2.0, to protect API endpoints.
+-   **Automated Testing**: Expand test coverage by introducing comprehensive unit and integration test suites using frameworks like `pytest` for the backend and `Vitest` or `Jest` for the frontend.
+-   **Observability**: Integrate structured logging (e.g., using `structlog`) and monitoring tools (e.g., Prometheus with Grafana) to gain better insights into application performance and behavior.
+-   **OpenAPI Specification**: Further refine the `docs/openapi.yaml` file by adding detailed request/response schemas, example payloads, and security scheme definitions to enhance API discoverability and client generation.
+
+---
 
 *Last updated based on repository state (2025-04-05).*
